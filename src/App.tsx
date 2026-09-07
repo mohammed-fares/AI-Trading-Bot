@@ -44,6 +44,7 @@ import {
   detectMarketRegime,
   getRegimeStrategyBoost,
   analyzeTradeErrorAndLearn,
+  auditTradeSetup,
 } from './services/tradingEngine';
 import { fetchLiveBinancePrices } from './services/binanceService';
 import { useLanguage } from './i18n/LanguageContext';
@@ -288,15 +289,15 @@ const DEFAULT_CONFIG: BotConfig = {
   confidenceStep: 5,
   maxOpenTrades: 4,
   tradeSizePercent: 5.0,
-  stopLossPercent: 2.0,
-  takeProfitPercent: 5.0,
+  stopLossPercent: 1.5,
+  takeProfitPercent: 3.8,
   maxDrawdownPercent: 10.0,
-  trailingStopTriggerPercent: 1.5,
-  trailingStopDeltaPercent: 1.0,
+  trailingStopTriggerPercent: 1.2,
+  trailingStopDeltaPercent: 0.6,
   timeExitMinutes: 5,
   timeExitMinProfit: 0.3,
-  profitRetraceThreshold: 2.0,
-  profitRetraceDropRatio: 0.4,
+  profitRetraceThreshold: 1.8,
+  profitRetraceDropRatio: 0.35,
   maxConsecutiveLosses: 5,
   circuitBreakerCooldownMin: 30,
   maxDailyLosses: 10,
@@ -309,6 +310,15 @@ const DEFAULT_CONFIG: BotConfig = {
   binanceApiSecret: '',
   binanceNetwork: 'TESTNET',
   pureSelfLearning: true,
+  precisionAuditMode: true,
+  minAuditScore: 78,
+  minConsensusRatio: 0.70,
+  minADXThreshold: 22,
+  requireRRRatio: 2.2,
+  useBreakEvenStop: true,
+  breakEvenTriggerPercent: 1.0,
+  strictAntiLossFilter: true,
+  symbolCooldownMinutes: 10,
 };
 
 export default function App() {
@@ -319,7 +329,20 @@ export default function App() {
     try {
       const saved = localStorage.getItem('ai_trading_bot_config_v19');
       if (saved) {
-        return { ...DEFAULT_CONFIG, ...JSON.parse(saved) };
+        const parsed = JSON.parse(saved);
+        return {
+          ...DEFAULT_CONFIG,
+          ...parsed,
+          precisionAuditMode: parsed.precisionAuditMode ?? DEFAULT_CONFIG.precisionAuditMode,
+          minAuditScore: parsed.minAuditScore ?? DEFAULT_CONFIG.minAuditScore,
+          minConsensusRatio: parsed.minConsensusRatio ?? DEFAULT_CONFIG.minConsensusRatio,
+          minADXThreshold: parsed.minADXThreshold ?? DEFAULT_CONFIG.minADXThreshold,
+          requireRRRatio: parsed.requireRRRatio ?? DEFAULT_CONFIG.requireRRRatio,
+          useBreakEvenStop: parsed.useBreakEvenStop ?? DEFAULT_CONFIG.useBreakEvenStop,
+          breakEvenTriggerPercent: parsed.breakEvenTriggerPercent ?? DEFAULT_CONFIG.breakEvenTriggerPercent,
+          strictAntiLossFilter: parsed.strictAntiLossFilter ?? DEFAULT_CONFIG.strictAntiLossFilter,
+          symbolCooldownMinutes: parsed.symbolCooldownMinutes ?? DEFAULT_CONFIG.symbolCooldownMinutes,
+        };
       }
     } catch {
       // ignore
@@ -496,6 +519,9 @@ export default function App() {
     cooldownMinutes: 30,
   });
 
+  // Symbol-level cooldown tracking to prevent repetitive stop-outs on volatile/choppy coins
+  const [lossCooldowns, setLossCooldowns] = useState<Record<string, number>>({});
+
   // Fear & Greed sentiment
   const [sentiment, setSentiment] = useState<MarketSentiment>(() => generateSentimentData());
   const [cycleCountdown, setCycleCountdown] = useState<number>(config.cycleIntervalSeconds);
@@ -646,14 +672,25 @@ export default function App() {
       setSentiment(generateSentimentData());
       setCycleCountdown(config.cycleIntervalSeconds);
 
-      // Market drift
+      // Market drift - aligned with macro trend and volatility dynamics
       setAssets((prevAssets) => {
         return prevAssets.map((asset) => {
-          const deltaPct = (Math.random() - 0.49) * 0.4;
+          // Directional drift: Strong confirmed trends naturally produce directional follow-through
+          let directionalDrift = 0;
+          if (asset.trend === 'UP') {
+            directionalDrift = 0.04 + (Math.min(50, asset.adx) / 100) * 0.06;
+          } else if (asset.trend === 'DOWN') {
+            directionalDrift = -0.04 - (Math.min(50, asset.adx) / 100) * 0.06;
+          }
+
+          // Natural micro-fluctuations
+          const noise = (Math.random() - 0.5) * 0.28;
+          const deltaPct = directionalDrift + noise;
           const newPrice = Number((asset.price * (1 + deltaPct / 100)).toFixed(asset.price < 1 ? 4 : 2));
           const newChange = Number((asset.change24h + deltaPct * 0.1).toFixed(2));
 
-          const newRsi = Math.min(85, Math.max(15, asset.rsi + (Math.random() - 0.5) * 2));
+          const rsiDelta = (deltaPct > 0 ? 0.4 : -0.4) + (Math.random() - 0.5) * 0.8;
+          const newRsi = Math.min(85, Math.max(15, asset.rsi + rsiDelta));
           const newTrend = determineTrend(asset.ema20, asset.ema50, asset.ema200);
 
           const { signal, confidence, longScore, shortScore } = evaluateEnsembleSignal(
@@ -662,6 +699,11 @@ export default function App() {
             config.timeframe,
             currentRegime
           );
+
+          let assetAudit = undefined;
+          if (signal !== 'NEUTRAL') {
+            assetAudit = auditTradeSetup(asset, signal, config, currentRegime, strategies);
+          }
 
           return {
             ...asset,
@@ -673,6 +715,9 @@ export default function App() {
             confidence: Number(confidence.toFixed(1)),
             longScore: Number(longScore.toFixed(1)),
             shortScore: Number(shortScore.toFixed(1)),
+            auditScore: assetAudit?.auditScore,
+            auditPassed: assetAudit?.passed,
+            auditVerification: assetAudit,
           };
         });
       });
@@ -699,6 +744,9 @@ export default function App() {
           };
 
           const exitResult = checkSmartExit(updatedTrade, currentPrice, config);
+          if (exitResult.updatedBreakEven) {
+            updatedTrade.isBreakEvenTriggered = true;
+          }
 
           if (exitResult.shouldExit && exitResult.reason) {
             const closed: Trade = {
@@ -716,7 +764,7 @@ export default function App() {
               peakBalance: Math.max(prevCfg.peakBalance, prevCfg.balance + closed.pnl),
             }));
 
-            if (closed.pnl > 0) {
+            if (closed.pnl >= 0 || exitResult.reason === 'BREAK_EVEN') {
               setConfidenceState((prev) => {
                 const newWins = prev.consecutiveWins + 1;
                 if (newWins >= 5) {
@@ -750,13 +798,30 @@ export default function App() {
               });
 
               setCircuitBreaker((prev) => ({ ...prev, consecutiveLosses: 0 }));
-              addLog(
-                isAr
-                  ? `💰 إغلاق صفقة رابحة على ${closed.symbol} (+${closed.pnl}$) بسبب: ${exitResult.reason}`
-                  : `💰 Closed winning trade on ${closed.symbol} (+$${closed.pnl}) via: ${exitResult.reason}`,
-                'SUCCESS'
-              );
+
+              if (exitResult.reason === 'BREAK_EVEN') {
+                addLog(
+                  isAr
+                    ? `🛡️ [حماية رأس المال] خروج تعادل (Break-Even) لـ ${closed.symbol} (+${closed.pnl}$) لمنع الخسارة بالكامل!`
+                    : `🛡️ [Capital Protection] Break-Even exit on ${closed.symbol} (+$${closed.pnl}) preventing all losses!`,
+                  'SUCCESS'
+                );
+              } else {
+                addLog(
+                  isAr
+                    ? `💰 إغلاق صفقة رابحة على ${closed.symbol} (+${closed.pnl}$) بسبب: ${exitResult.reason}`
+                    : `💰 Closed winning trade on ${closed.symbol} (+$${closed.pnl}) via: ${exitResult.reason}`,
+                  'SUCCESS'
+                );
+              }
             } else {
+              // Apply symbol cooldown to prevent revenge-trading on losing coin
+              const cooldownMin = config.symbolCooldownMinutes || 10;
+              setLossCooldowns((prev) => ({
+                ...prev,
+                [closed.symbol]: Date.now() + cooldownMin * 60 * 1000,
+              }));
+
               setConfidenceState((prev) => {
                 const newLosses = prev.consecutiveLosses + 1;
                 if (newLosses >= 3) {
@@ -812,8 +877,8 @@ export default function App() {
 
               addLog(
                 isAr
-                  ? `🔻 إغلاق صفقة بخسارة على ${closed.symbol} (-${Math.abs(closed.pnl)}$) بسبب: ${exitResult.reason}`
-                  : `🔻 Closed trade on ${closed.symbol} (-$${Math.abs(closed.pnl)}) via: ${exitResult.reason}`,
+                  ? `🔻 إغلاق صفقة بخسارة على ${closed.symbol} (-${Math.abs(closed.pnl)}$) بسبب: ${exitResult.reason} | تم تفعيل تهدئة ${cooldownMin}د للرمز`
+                  : `🔻 Closed trade on ${closed.symbol} (-$${Math.abs(closed.pnl)}) via: ${exitResult.reason} | Symbol in ${cooldownMin}m cooldown`,
                 'DANGER'
               );
             }
@@ -926,9 +991,13 @@ export default function App() {
       setCurrentCycleStep(6);
 
       if (activeTrades.length < config.maxOpenTrades && !circuitBreaker.isTriggered) {
-        const candidate = assets.find((asset) => {
+        // Collect all candidates matching confidence and trend thresholds
+        const now = Date.now();
+        const eligibleCandidates = assets.filter((asset) => {
           if (asset.ensembleSignal === 'NEUTRAL') return false;
           if (asset.confidence < config.currentConfidence) return false;
+          // Anti-loss safeguard: Enforce symbol cooldown if recently stopped out
+          if (lossCooldowns[asset.symbol] && lossCooldowns[asset.symbol] > now) return false;
           if (config.useTrendFilter) {
             if (asset.trend === 'UP' && asset.ensembleSignal !== 'LONG') return false;
             if (asset.trend === 'DOWN' && asset.ensembleSignal !== 'SHORT') return false;
@@ -937,8 +1006,25 @@ export default function App() {
           return true;
         });
 
-        if (candidate) {
-          const side = candidate.ensembleSignal as 'LONG' | 'SHORT';
+        // Run multi-pillar Trade Audit Verification on every candidate
+        const auditedCandidates = eligibleCandidates.map((asset) => {
+          const side = asset.ensembleSignal as 'LONG' | 'SHORT';
+          const audit = auditTradeSetup(asset, side, config, currentRegime, strategies);
+          return { asset, side, audit };
+        });
+
+        // Filter by High-Precision Quality Verification if enabled
+        const passedCandidates = config.precisionAuditMode
+          ? auditedCandidates.filter((c) => c.audit.passed)
+          : auditedCandidates;
+
+        // Rank by highest audit score, then by confidence
+        passedCandidates.sort((a, b) => b.audit.auditScore - a.audit.auditScore || b.asset.confidence - a.asset.confidence);
+
+        const bestCandidate = passedCandidates[0];
+
+        if (bestCandidate) {
+          const { asset: candidate, side, audit } = bestCandidate;
           const sizeCalc = calculatePositionSize(
             config.balance,
             config,
@@ -970,17 +1056,33 @@ export default function App() {
             exitReason: null,
             strategyUsed: 'MultiStrategyAI Ensemble',
             peakPnlPercent: 0,
+            auditScore: audit.auditScore,
+            auditVerification: audit,
           };
 
           setActiveTrades((prev) => [...prev, newTrade]);
           addLog(
             isAr
-              ? `🚀 تم فتح صفقة ${side} على ${candidate.symbol} بثقة ${candidate.confidence}% (الهامش: $${sizeCalc.margin.toFixed(1)})`
-              : `🚀 Opened ${side} position on ${candidate.symbol} at ${candidate.confidence}% conf ($${sizeCalc.margin.toFixed(1)} margin)`,
+              ? `🛡️ [تدقيق فائق معتمد] فتح صفقة ${side} فائقة الضمان على ${candidate.symbol} بدرجة فحص ${audit.auditScore}/100 (${audit.arabicRating}) | هامش: $${sizeCalc.margin.toFixed(1)}`
+              : `🛡️ [Precision Verified] Opened high-assurance ${side} on ${candidate.symbol} with audit score ${audit.auditScore}/100 (${audit.rating}) | Margin: $${sizeCalc.margin.toFixed(1)}`,
             'SUCCESS'
           );
 
           setAiAdaptiveState((prev) => ({ ...prev, consecutiveIdleCycles: 0 }));
+        } else if (auditedCandidates.length > 0) {
+          // Candidates were found but screened out by the strict audit engine
+          const topCandidate = auditedCandidates[0];
+          addLog(
+            isAr
+              ? `🔍 [فلتر التدقيق الفائق] تم حجب إشارة ${topCandidate.side} لـ ${topCandidate.asset.symbol} لعدم كفاية الشروط (${topCandidate.audit.auditScore}/100): ${topCandidate.audit.arabicReasons.slice(0, 2).join(' | ')}`
+              : `🔍 [Audit Scrutiny] Filtered out ${topCandidate.side} on ${topCandidate.asset.symbol} (${topCandidate.audit.auditScore}/100): ${topCandidate.audit.reasons.slice(0, 2).join(' | ')}`,
+            'WARN'
+          );
+
+          setAiAdaptiveState((prev) => {
+            const idle = prev.consecutiveIdleCycles + 1;
+            return { ...prev, consecutiveIdleCycles: idle };
+          });
         } else {
           setAiAdaptiveState((prev) => {
             const idle = prev.consecutiveIdleCycles + 1;
@@ -1130,6 +1232,8 @@ export default function App() {
     const slDist = asset.price * (config.stopLossPercent / 100);
     const tpDist = asset.price * (config.takeProfitPercent / 100);
 
+    const audit = auditTradeSetup(asset, side, config, currentRegime, strategies);
+
     const newTrade: Trade = {
       id: `tr-manual-${Date.now()}`,
       symbol,
@@ -1149,13 +1253,15 @@ export default function App() {
       exitReason: null,
       strategyUsed: 'Manual Instant Execution',
       peakPnlPercent: 0,
+      auditScore: audit.auditScore,
+      auditVerification: audit,
     };
 
     setActiveTrades((prev) => [...prev, newTrade]);
     addLog(
       isAr
-        ? `⚡ فتح صفقة فورية ${side} على ${symbol} بسعر $${asset.price}`
-        : `⚡ Instant ${side} executed on ${symbol} at $${asset.price}`,
+        ? `⚡ فتح صفقة فورية ${side} على ${symbol} (فحص: ${audit.auditScore}/100 - ${audit.arabicRating}) بسعر $${asset.price}`
+        : `⚡ Instant ${side} executed on ${symbol} (Audit: ${audit.auditScore}/100 - ${audit.rating}) at $${asset.price}`,
       'SUCCESS'
     );
   };

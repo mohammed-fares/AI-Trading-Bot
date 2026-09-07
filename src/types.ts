@@ -6,6 +6,7 @@ export type ExitReason =
   | 'TAKE_PROFIT'
   | 'STOP_LOSS'
   | 'TRAILING_STOP'
+  | 'BREAK_EVEN'
   | 'TIME_EXIT'
   | 'PROFIT_RETRACEMENT'
   | 'CIRCUIT_BREAKER'
@@ -58,6 +59,94 @@ export interface StrategyPerformance {
   worstTrade: number;
 }
 
+export interface AuditCheckItem {
+  name: string;
+  arabicName: string;
+  passed: boolean;
+  score: number; // e.g. out of 20
+  weight: number;
+  value: string;
+  arabicValue: string;
+  warning?: string;
+  arabicWarning?: string;
+}
+
+export interface TradeAuditVerification {
+  passed: boolean;
+  auditScore: number; // 0 to 100
+  rating: 'PERFECT_CONFLUENCE' | 'HIGH_ASSURANCE' | 'ACCEPTABLE' | 'REJECTED';
+  arabicRating: string;
+  checks: {
+    trendCascade: AuditCheckItem;
+    momentumConfluence: AuditCheckItem;
+    trendStrengthADX: AuditCheckItem;
+    volatilityBandwidth: AuditCheckItem;
+    strategyConsensus: AuditCheckItem;
+    riskRewardRatio: AuditCheckItem;
+    timeFrameAlignment?: AuditCheckItem;
+    orderbookLiquidity?: AuditCheckItem;
+  };
+  reasons: string[];
+  arabicReasons: string[];
+}
+
+export interface TimeFrameData {
+  timeframe: '15m' | '1h' | '4h';
+  trend: MarketTrend;
+  ema20: number;
+  ema50: number;
+  rsi: number;
+  macdSignal: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
+}
+
+export interface TimeFrameAlignment {
+  tf15m: TimeFrameData;
+  tf1h: TimeFrameData;
+  tf4h: TimeFrameData;
+  isAligned: boolean;
+  alignmentDirection: 'LONG' | 'SHORT' | 'CONFLICT' | 'NEUTRAL';
+  alignmentScore: number; // 0 - 100%
+  macroBias: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
+  conflictReason?: string;
+  arabicConflictReason?: string;
+}
+
+export interface OrderbookWall {
+  type: 'BUY_WALL' | 'SELL_WALL';
+  price: number;
+  distancePercent: number;
+  quantity: number;
+  notionalUSDT: number;
+  significanceMultiplier: number;
+}
+
+export interface OrderbookDepthAnalysis {
+  symbol: string;
+  bidVolume: number;
+  askVolume: number;
+  bidAskRatio: number;
+  buyWalls: OrderbookWall[];
+  sellWalls: OrderbookWall[];
+  nearestOpposingWall?: OrderbookWall;
+  hasOpposingWall: boolean;
+  depthStatus: 'HEALTHY' | 'SELL_WALL_BLOCKED' | 'BUY_WALL_BLOCKED' | 'IMBALANCE_WARNING';
+  arabicStatus: string;
+  details: string;
+  arabicDetails: string;
+}
+
+export interface SmartFreezeInfo {
+  symbol: string;
+  isFrozen: boolean;
+  frozenAt?: number;
+  frozenUntil?: number;
+  volatility15m: number;
+  peak15mPrice: number;
+  trough15mPrice: number;
+  reason: string;
+  arabicReason: string;
+}
+
 export interface CryptoAsset {
   symbol: string; // e.g. 'BTC/USDT'
   baseAsset?: string; // e.g. 'BTC'
@@ -82,6 +171,16 @@ export interface CryptoAsset {
   shortScore: number;
   confidence: number; // 0 to 100%
   score?: number; // normalized aggregate score
+  // Audit Verification
+  auditScore?: number;
+  auditPassed?: boolean;
+  auditVerification?: TradeAuditVerification;
+  // Time-Frame Alignment (15m, 1h, 4h)
+  timeframeAlignment?: TimeFrameAlignment;
+  // Binance Orderbook Depth & Liquidity Walls
+  orderbookDepth?: OrderbookDepthAnalysis;
+  // Smart Freeze state
+  smartFreeze?: SmartFreezeInfo;
 }
 
 export interface Trade {
@@ -103,8 +202,12 @@ export interface Trade {
   takeProfit: number;
   trailingStopActive?: boolean;
   trailingStopPrice?: number;
+  isBreakEvenTriggered?: boolean;
+  breakEvenPrice?: number;
   strategyUsed: string;
   confidence: number;
+  auditScore?: number;
+  auditVerification?: TradeAuditVerification;
   openedAt: number; // timestamp
   closedAt?: number;
   closePrice?: number;
@@ -152,6 +255,26 @@ export interface BotConfig {
   binanceApiSecret: string;
   binanceNetwork: 'TESTNET' | 'PRODUCTION';
   pureSelfLearning: boolean;
+  // High-Precision Trade Verification & Scrutiny
+  precisionAuditMode: boolean;
+  minAuditScore: number; // default: 75%
+  minConsensusRatio: number; // default: 0.65 (65%)
+  minADXThreshold: number; // default: 20
+  requireRRRatio: number; // default: 2.0 (1:2 minimum)
+  // Anti-Loss & Break-Even Safeguards
+  useBreakEvenStop: boolean; // auto moves SL to entry +0.15% once in profit
+  breakEvenTriggerPercent: number; // e.g. 1.0% unleveraged gain
+  strictAntiLossFilter: boolean; // strictly blocks overextended and low-quality setups
+  symbolCooldownMinutes: number; // cooldown period after a stopped-out loss
+  // Time-Frame Alignment (15m, 1h, 4h)
+  enforceTimeFrameAlignment: boolean; // Ensures 15m, 1h, 4h indicator cascade matches entry
+  // Binance Orderbook Liquidity Walls
+  orderbookFilterEnabled: boolean; // Blocks trades encountering opposing Liquidity Walls
+  maxOpposingWallDistancePct: number; // e.g. 2.5% proximity threshold
+  // Smart Freeze (15m Abnormal Volatility Protection)
+  smartFreezeEnabled: boolean; // Suspends trading on pairs with abnormal 15m volatility
+  smartFreezeThresholdPercent: number; // 15m price swing threshold (e.g. 2.8%)
+  smartFreezeDurationMinutes: number; // Freeze duration (e.g. 15 min)
 }
 
 export type Language = 'ar' | 'en';

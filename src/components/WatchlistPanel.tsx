@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   TrendingUp,
   TrendingDown,
@@ -6,8 +6,13 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Sparkles,
+  ShieldCheck,
+  CheckCircle2,
+  XCircle,
+  X,
+  Info,
 } from 'lucide-react';
-import { CryptoAsset } from '../types';
+import { CryptoAsset, AuditCheckItem } from '../types';
 import { useLanguage } from '../i18n/LanguageContext';
 
 interface WatchlistPanelProps {
@@ -24,6 +29,7 @@ export const WatchlistPanel: React.FC<WatchlistPanelProps> = ({
   onForceTrade,
 }) => {
   const { t, isAr } = useLanguage();
+  const [inspectedAsset, setInspectedAsset] = useState<CryptoAsset | null>(null);
 
   return (
     <div className="bg-[#181a20] border border-[#2b2f36] rounded-xl p-4 shadow-sm">
@@ -46,6 +52,8 @@ export const WatchlistPanel: React.FC<WatchlistPanelProps> = ({
           const isSelected = selectedSymbol === asset.symbol;
           const isUpTrend = asset.trend === 'UP';
           const isDownTrend = asset.trend === 'DOWN';
+          const hasAudit = asset.auditScore !== undefined;
+          const isAuditPassed = asset.auditPassed;
 
           return (
             <div
@@ -95,7 +103,7 @@ export const WatchlistPanel: React.FC<WatchlistPanelProps> = ({
               </div>
 
               {/* Technical Indicators & Trend */}
-              <div className="bg-[#0b0e11] rounded-lg p-2 border border-[#2b2f36] mb-2.5 text-xs space-y-1 font-mono">
+              <div className="bg-[#0b0e11] rounded-lg p-2 border border-[#2b2f36] mb-2 text-xs space-y-1 font-mono">
                 <div className="flex items-center justify-between text-[10px]">
                   <span className="text-[#848e9c]">{t.trendLabel}:</span>
                   <span
@@ -119,6 +127,35 @@ export const WatchlistPanel: React.FC<WatchlistPanelProps> = ({
                   <span>ADX: <strong className="text-[#fcd535]">{asset.adx.toFixed(0)}</strong></span>
                 </div>
               </div>
+
+              {/* High-Precision Quality Audit Status */}
+              {hasAudit && (
+                <div
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setInspectedAsset(asset);
+                  }}
+                  className="bg-[#0b0e11] rounded-lg p-1.5 border border-[#2b2f36] hover:border-[#fcd535]/50 transition mb-2 flex items-center justify-between text-[10px] font-mono group"
+                  title={isAr ? 'اضغط لعرض تفاصيل التدقيق والفحص الفني' : 'Click to inspect 6 audit pillars'}
+                >
+                  <span className="text-[#848e9c] flex items-center gap-1">
+                    <ShieldCheck className={`h-3 w-3 ${isAuditPassed ? 'text-emerald-400' : 'text-amber-400'}`} />
+                    <span>{isAr ? 'تدقيق الجودة:' : 'Audit Score:'}</span>
+                  </span>
+                  <div className="flex items-center gap-1">
+                    <span
+                      className={`font-bold px-1.5 py-0.2 rounded ${
+                        isAuditPassed
+                          ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                          : 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
+                      }`}
+                    >
+                      {asset.auditScore}% {isAuditPassed ? (isAr ? 'معتمد 🛡️' : 'PASS 🛡️') : (isAr ? 'قيد الفحص' : 'HOLD')}
+                    </span>
+                    <Info className="h-2.5 w-2.5 text-[#848e9c] group-hover:text-[#fcd535]" />
+                  </div>
+                </div>
+              )}
 
               {/* Ensemble Signal Output */}
               <div className="border-t border-[#2b2f36] pt-2">
@@ -191,6 +228,130 @@ export const WatchlistPanel: React.FC<WatchlistPanelProps> = ({
           );
         })}
       </div>
+
+      {/* Audit Detail Modal for Watchlist Asset */}
+      {inspectedAsset && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs">
+          <div className="bg-[#181a20] border border-[#2b2f36] rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl animate-in fade-in">
+            {/* Header */}
+            <div className="flex items-center justify-between p-4 border-b border-[#2b2f36]">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="h-5 w-5 text-emerald-400" />
+                <div>
+                  <h3 className="text-sm font-bold text-[#eaecef]">
+                    {isAr ? 'فحص جودة وتدقيق الإشارة المباشرة' : 'Signal Quality Audit Report'}
+                  </h3>
+                  <p className="text-[11px] text-[#848e9c] font-mono">
+                    {inspectedAsset.symbol} // {inspectedAsset.ensembleSignal} ({inspectedAsset.confidence}%)
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setInspectedAsset(null)}
+                className="text-[#848e9c] hover:text-[#eaecef] p-1.5 rounded-lg hover:bg-[#1e2329]"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-4 space-y-4 max-h-[70vh] overflow-y-auto">
+              {/* Score header */}
+              <div className={`p-3.5 rounded-xl border flex items-center justify-between ${
+                inspectedAsset.auditPassed
+                  ? 'bg-emerald-500/10 border-emerald-500/30'
+                  : 'bg-amber-500/10 border-amber-500/30'
+              }`}>
+                <div>
+                  <span className={`text-xs font-bold block ${inspectedAsset.auditPassed ? 'text-emerald-400' : 'text-amber-400'}`}>
+                    {inspectedAsset.auditPassed
+                      ? (isAr ? '🛡️ إشارة فائقة الضمان ومعتمدة للتنفيذ' : '🛡️ High-Assurance Verified for Entry')
+                      : (isAr ? '⚠️ إشارة قيد الفحص (لم تكتمل جميع الشروط)' : '⚠️ Scrutiny Screening (Pillars Incomplete)')}
+                  </span>
+                  <p className="text-[11px] text-[#eaecef] mt-0.5">
+                    {inspectedAsset.auditVerification
+                      ? isAr
+                        ? inspectedAsset.auditVerification.arabicRating
+                        : inspectedAsset.auditVerification.rating
+                      : ''}
+                  </p>
+                </div>
+                <div className={`text-2xl font-bold font-mono ${inspectedAsset.auditPassed ? 'text-emerald-400' : 'text-amber-400'}`}>
+                  {inspectedAsset.auditScore ?? 0}/100
+                </div>
+              </div>
+
+              {/* Verification Checklist */}
+              {inspectedAsset.auditVerification?.checks && (
+                <div className="space-y-2">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-[#848e9c] font-mono">
+                    {isAr ? 'معايير التدقيق الستة' : '6 Verification Pillars'}
+                  </h4>
+                  {(Object.entries(inspectedAsset.auditVerification.checks) as [string, AuditCheckItem][]).map(([key, check]) => (
+                    <div
+                      key={key}
+                      className="p-2.5 rounded-lg bg-[#1e2329] border border-[#2b2f36] flex items-center justify-between text-xs"
+                    >
+                      <div className="flex items-center gap-2">
+                        {check.passed ? (
+                          <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+                        ) : (
+                          <XCircle className="h-4 w-4 text-amber-400 shrink-0" />
+                        )}
+                        <div>
+                          <span className="font-semibold text-[#eaecef] block">
+                            {isAr ? check.arabicName : check.name}
+                          </span>
+                          <span className="text-[11px] text-[#848e9c]">
+                            {isAr ? check.arabicValue : check.value}
+                          </span>
+                        </div>
+                      </div>
+                      <span className={`font-mono text-xs font-bold ${check.passed ? 'text-emerald-400' : 'text-amber-400'}`}>
+                        +{check.score}/{check.weight}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Reasons list */}
+              {inspectedAsset.auditVerification && (
+                <div className="p-3 rounded-xl bg-[#0b0e11] border border-[#2b2f36] space-y-1.5 text-xs font-mono">
+                  <span className="text-[#848e9c] block font-bold text-[11px]">
+                    {isAr ? 'ملخص تحليل الفحص:' : 'Audit Analysis Summary:'}
+                  </span>
+                  {(isAr ? inspectedAsset.auditVerification.arabicReasons : inspectedAsset.auditVerification.reasons).map((reason, idx) => (
+                    <p key={idx} className="text-[#eaecef] flex items-start gap-1.5">
+                      <span className="text-[#fcd535]">•</span>
+                      <span>{reason}</span>
+                    </p>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="p-3 bg-[#1e2329] border-t border-[#2b2f36] flex items-center justify-between">
+              <button
+                onClick={() => {
+                  onForceTrade(inspectedAsset.symbol, inspectedAsset.ensembleSignal === 'SHORT' ? 'SHORT' : 'LONG');
+                  setInspectedAsset(null);
+                }}
+                className="px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-lg text-xs font-bold transition font-mono"
+              >
+                {isAr ? 'تنفيذ فوري مباشر ⚡' : 'Execute Instant Trade ⚡'}
+              </button>
+              <button
+                onClick={() => setInspectedAsset(null)}
+                className="px-4 py-1.5 bg-[#2b2f36] hover:bg-[#3b404a] text-[#eaecef] text-xs font-bold rounded-lg transition"
+              >
+                {isAr ? 'إغلاق' : 'Close'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

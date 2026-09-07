@@ -13,6 +13,7 @@ import {
   Database,
   Trash2,
   CheckCircle2,
+  ShieldCheck,
 } from 'lucide-react';
 import {
   AdaptiveConfidenceState,
@@ -268,6 +269,69 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
               <span className="text-[10px] text-[#848e9c]">(-10%)</span>
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* High-Precision Trade Audit Engine */}
+      <div className="space-y-2.5 pt-2 border-t border-[#2b2f36]">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-bold uppercase tracking-wider text-[#848e9c] flex items-center gap-1.5">
+            <ShieldCheck className="h-4 w-4 text-emerald-400" />
+            <span>{isAr ? 'محرك التدقيق والفحص الفائق' : 'Precision Audit Engine'}</span>
+          </span>
+          <span
+            className={`text-[10px] font-mono px-1.5 py-0.5 rounded border font-bold ${
+              config.precisionAuditMode
+                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                : 'bg-[#1e2329] border-[#2b2f36] text-[#848e9c]'
+            }`}
+          >
+            {config.precisionAuditMode ? (isAr ? 'نشط 🛡️' : 'ACTIVE 🛡️') : (isAr ? 'متوقف' : 'OFF')}
+          </span>
+        </div>
+
+        <div className="bg-[#1e2329] border border-[#2b2f36] rounded-xl p-2.5 space-y-2 text-xs">
+          <label className="flex items-center justify-between cursor-pointer">
+            <span className="text-[#eaecef] font-semibold text-[11px]">
+              {isAr ? 'حظر الصفقات غير مكتملة المعايير' : 'Block Sub-Par Signals'}
+            </span>
+            <input
+              type="checkbox"
+              checked={config.precisionAuditMode}
+              onChange={(e) => onUpdateConfig({ precisionAuditMode: e.target.checked })}
+              className="rounded text-emerald-400 focus:ring-0 accent-emerald-500"
+            />
+          </label>
+
+          {config.precisionAuditMode && (
+            <div className="pt-1.5 border-t border-[#2b2f36] space-y-1.5">
+              <div className="flex items-center justify-between text-[11px] text-[#848e9c] font-mono">
+                <span>{isAr ? 'الحد الأدنى لدرجة الجودة:' : 'Min Quality Score:'}</span>
+                <span className="text-emerald-400 font-bold">{config.minAuditScore}%</span>
+              </div>
+              <div className="grid grid-cols-4 gap-1 text-[10px] font-mono">
+                {[70, 75, 80, 85].map((score) => (
+                  <button
+                    key={score}
+                    type="button"
+                    onClick={() => onUpdateConfig({ minAuditScore: score })}
+                    className={`py-1 rounded border text-center transition ${
+                      config.minAuditScore === score
+                        ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300 font-bold'
+                        : 'bg-[#0b0e11] border-[#2b2f36] text-[#848e9c] hover:text-[#eaecef]'
+                    }`}
+                  >
+                    {score}%
+                  </button>
+                ))}
+              </div>
+              <p className="text-[10px] text-[#848e9c] leading-tight">
+                {isAr
+                  ? 'يتم فحص (الاتجاه، الزخم، ADX، التذبذب، إجماع 50+ استراتيجية، وR:R) بدقة متناهية.'
+                  : 'Checks Trend, Momentum, ADX, Volatility, 50+ Strategies & R:R.'}
+              </p>
+            </div>
+          )}
         </div>
       </div>
 

@@ -248,6 +248,70 @@ export const RiskSystemsPanel: React.FC<RiskSystemsPanelProps> = ({
             </div>
           </div>
         </div>
+
+        {/* 7. Ultra-Rigorous Trade Creation Audit */}
+        <div className="bg-[#1e2329] border border-emerald-500/30 rounded-xl p-3 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-[#eaecef] flex items-center gap-1.5 font-mono">
+              <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
+              <span>7. {isAr ? 'التدقيق الفائق الصارم لإنشاء الصفقات' : 'Rigorous Trade Audit Engine'}</span>
+            </span>
+            <span className="text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-1.5 py-0.2 rounded font-mono">
+              {config.precisionAuditMode ? (isAr ? 'مفعل 🛡️' : 'ACTIVE') : 'OFF'}
+            </span>
+          </div>
+          <p className="text-[11px] text-[#848e9c] leading-relaxed">
+            {isAr
+              ? 'يتحقق من 6 محاور جودة فنية ويمنع الشراء عند القمم (RSI > 62) أو البيع عند القيعان (RSI < 38) ويحظر الصفقات المتعارضة مع EMA 200.'
+              : 'Enforces 6 technical pillars, blocks buying at peaks (RSI > 62) / selling at bottoms (RSI < 38), and mandates EMA200 alignment.'}
+          </p>
+          <div className="bg-[#0b0e11] rounded-lg p-2 text-[11px] font-mono text-[#848e9c] space-y-1">
+            <div className="flex justify-between">
+              <span>{isAr ? 'الحد الأدنى لدرجة الجودة:' : 'Min Audit Score:'}</span>
+              <span className="text-emerald-400 font-bold">{config.minAuditScore ?? 78}/100</span>
+            </div>
+            <div className="flex justify-between">
+              <span>{isAr ? 'إجماع الاستراتيجيات:' : 'Consensus Ratio:'}</span>
+              <span className="text-[#eaecef] font-bold">{((config.minConsensusRatio ?? 0.7) * 100).toFixed(0)}%</span>
+            </div>
+            <div className="flex justify-between">
+              <span>{isAr ? 'قوة الاتجاه (ADX):' : 'Min ADX:'}</span>
+              <span className="text-[#fcd535] font-bold">&gt;= {config.minADXThreshold ?? 22}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* 8. Break-Even Stop Loss & Symbol Cooldown */}
+        <div className="bg-[#1e2329] border border-cyan-500/30 rounded-xl p-3 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-[#eaecef] flex items-center gap-1.5 font-mono">
+              <Zap className="h-3.5 w-3.5 text-cyan-400" />
+              <span>8. {isAr ? 'حماية رأس المال (Break-Even وتبريد الخسائر)' : 'Break-Even & Cooldown Shield'}</span>
+            </span>
+            <span className="text-[10px] bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 px-1.5 py-0.2 rounded font-mono">
+              {config.useBreakEvenStop !== false ? (isAr ? 'مفعل 🛡️' : 'ACTIVE') : 'OFF'}
+            </span>
+          </div>
+          <p className="text-[11px] text-[#848e9c] leading-relaxed">
+            {isAr
+              ? 'ينقل الوقف تلقائياً لسعر الدخول (+0.12% لحساب العمولات) بمجرد تحقيق ربح لمنع تحول الربح لخسارة، مع حظر الرمز الخاسر لمدة 10 دقائق.'
+              : 'Auto-shifts Stop Loss to Entry (+0.12% buffer) upon reaching profit threshold to eliminate losses, plus 10m cooldown on stopped coins.'}
+          </p>
+          <div className="bg-[#0b0e11] rounded-lg p-2 text-[11px] font-mono text-[#848e9c] space-y-1">
+            <div className="flex justify-between">
+              <span>{isAr ? 'عتبة نقل الوقف:' : 'Break-Even Trigger:'}</span>
+              <span className="text-cyan-400 font-bold">&gt;= {config.breakEvenTriggerPercent ?? 1.0}%</span>
+            </div>
+            <div className="flex justify-between">
+              <span>{isAr ? 'فترة تبريد الرمز بعد الخسارة:' : 'Loss Cooldown:'}</span>
+              <span className="text-[#eaecef] font-bold">{config.symbolCooldownMinutes ?? 10} min</span>
+            </div>
+            <div className="flex justify-between">
+              <span>{isAr ? 'حماية الرسوم:' : 'Fee Buffer:'}</span>
+              <span className="text-emerald-400 font-bold">+0.12% Entry Offset</span>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

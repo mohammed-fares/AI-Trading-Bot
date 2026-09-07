@@ -13,6 +13,8 @@ import {
   Trash2,
   AlertTriangle,
   RotateCcw,
+  ShieldCheck,
+  ShieldAlert,
 } from 'lucide-react';
 import { BotConfig, TimeFrame } from '../types';
 import { useLanguage } from '../i18n/LanguageContext';
@@ -524,6 +526,183 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <span className="font-semibold text-[#eaecef]">{t.settingsSmartExit}</span>
                   </div>
                 </label>
+              </div>
+
+              {/* High-Precision Trade Audit Section */}
+              <div className="p-3.5 rounded-xl bg-[#1e2329] border border-emerald-500/30 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="h-4 w-4 text-emerald-400" />
+                    <div>
+                      <span className="font-bold text-[#eaecef] text-xs block">
+                        {isAr ? 'محرك الفحص والتدقيق الفائق لصفقات عالية الضمان' : 'High-Precision Trade Audit Engine'}
+                      </span>
+                      <span className="text-[10px] text-[#848e9c]">
+                        {isAr
+                          ? 'فحص شامل عبر 6 محاور فنية لمنع الصفقات المتذبذبة'
+                          : 'Comprehensive 6-pillar validation to eliminate choppy setups'}
+                      </span>
+                    </div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={formData.precisionAuditMode}
+                    onChange={(e) => setFormData({ ...formData, precisionAuditMode: e.target.checked })}
+                    className="rounded text-emerald-400 focus:ring-0 accent-emerald-500 h-4 w-4"
+                  />
+                </div>
+
+                {formData.precisionAuditMode && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 pt-2 border-t border-[#2b2f36] text-xs font-mono">
+                    <div>
+                      <label className="text-[#848e9c] block mb-1 text-[11px]">
+                        {isAr ? 'الحد الأدنى للجودة (Score)' : 'Min Audit Score'}
+                      </label>
+                      <select
+                        value={formData.minAuditScore}
+                        onChange={(e) => setFormData({ ...formData, minAuditScore: parseInt(e.target.value) || 75 })}
+                        className="w-full bg-[#0b0e11] border border-[#2b2f36] rounded-lg px-2.5 py-1.5 text-emerald-400 font-bold focus:outline-none focus:border-emerald-500"
+                      >
+                        <option value={70}>70% ({isAr ? 'مرن' : 'Moderate'})</option>
+                        <option value={75}>75% ({isAr ? 'قياسي موصى به' : 'Recommended'})</option>
+                        <option value={80}>80% ({isAr ? 'صارم عالي الضمان' : 'Strict High-Win'})</option>
+                        <option value={85}>85% ({isAr ? 'فائق النقاء' : 'Ultra Pure'})</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="text-[#848e9c] block mb-1 text-[11px]">
+                        {isAr ? 'إجماع الاستراتيجيات' : 'Min Consensus'}
+                      </label>
+                      <select
+                        value={formData.minConsensusRatio}
+                        onChange={(e) => setFormData({ ...formData, minConsensusRatio: parseFloat(e.target.value) || 0.65 })}
+                        className="w-full bg-[#0b0e11] border border-[#2b2f36] rounded-lg px-2.5 py-1.5 text-[#eaecef] focus:outline-none focus:border-emerald-500"
+                      >
+                        <option value={0.55}>55%</option>
+                        <option value={0.65}>65% ({isAr ? 'موصى به' : 'Optimal'})</option>
+                        <option value={0.75}>75% ({isAr ? 'إجماع قوي' : 'Strong'})</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="text-[#848e9c] block mb-1 text-[11px]">
+                        {isAr ? 'قوة الاتجاه (ADX)' : 'Min ADX Strength'}
+                      </label>
+                      <select
+                        value={formData.minADXThreshold}
+                        onChange={(e) => setFormData({ ...formData, minADXThreshold: parseInt(e.target.value) || 20 })}
+                        className="w-full bg-[#0b0e11] border border-[#2b2f36] rounded-lg px-2.5 py-1.5 text-[#eaecef] focus:outline-none focus:border-emerald-500"
+                      >
+                        <option value={15}>15 ({isAr ? 'حتى في التذبذب' : 'Low'})</option>
+                        <option value={20}>20 ({isAr ? 'اتجاه واضح' : 'Trending'})</option>
+                        <option value={25}>25 ({isAr ? 'زخم قوي' : 'Strong Trend'})</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="text-[#848e9c] block mb-1 text-[11px]">
+                        {isAr ? 'نسبة العائد/المخاطرة R:R' : 'Min R:R Ratio'}
+                      </label>
+                      <select
+                        value={formData.requireRRRatio}
+                        onChange={(e) => setFormData({ ...formData, requireRRRatio: parseFloat(e.target.value) || 2.0 })}
+                        className="w-full bg-[#0b0e11] border border-[#2b2f36] rounded-lg px-2.5 py-1.5 text-[#eaecef] focus:outline-none focus:border-emerald-500"
+                      >
+                        <option value={1.5}>1 : 1.5</option>
+                        <option value={2.0}>1 : 2.0 ({isAr ? 'قياسي' : 'Standard'})</option>
+                        <option value={2.5}>1 : 2.5 ({isAr ? 'غير متماثل' : 'Asymmetric'})</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Anti-Loss Safeguards & Break-Even Section */}
+              <div className="p-3.5 rounded-xl bg-[#1e2329] border border-cyan-500/30 space-y-3">
+                <div className="flex items-center gap-2">
+                  <ShieldAlert className="h-4 w-4 text-cyan-400" />
+                  <div>
+                    <span className="font-bold text-[#eaecef] text-xs block">
+                      {isAr ? 'حماية رأس المال وضمان عدم تكرار الخسائر' : 'Anti-Loss Capital Shield & Break-Even'}
+                    </span>
+                    <span className="text-[10px] text-[#848e9c]">
+                      {isAr
+                        ? 'إجراءات وقائية متقدمة لمنع انعكاس الصفقات الرابحة وتفادي الصفقات السيئة'
+                        : 'Prevent profit reversal and eliminate repetitive coin stop-outs'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="space-y-2 pt-2 border-t border-[#2b2f36]">
+                  {/* Break-Even Toggle */}
+                  <label className="flex items-center justify-between p-2.5 rounded-lg bg-[#0b0e11] border border-[#2b2f36] cursor-pointer hover:border-cyan-500/40 transition">
+                    <div className="pr-2">
+                      <span className="font-semibold text-[#eaecef] text-xs block">
+                        {t.breakEvenStopTitle}
+                      </span>
+                      <span className="text-[10px] text-[#848e9c]">
+                        {t.breakEvenStopDesc}
+                      </span>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={formData.useBreakEvenStop ?? true}
+                      onChange={(e) => setFormData({ ...formData, useBreakEvenStop: e.target.checked })}
+                      className="rounded text-cyan-400 focus:ring-0 accent-cyan-500 h-4 w-4 shrink-0"
+                    />
+                  </label>
+
+                  {/* Strict Anti-Loss Filter */}
+                  <label className="flex items-center justify-between p-2.5 rounded-lg bg-[#0b0e11] border border-[#2b2f36] cursor-pointer hover:border-cyan-500/40 transition">
+                    <div className="pr-2">
+                      <span className="font-semibold text-[#eaecef] text-xs block">
+                        {t.strictAntiLossTitle}
+                      </span>
+                      <span className="text-[10px] text-[#848e9c]">
+                        {t.strictAntiLossDesc}
+                      </span>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={formData.strictAntiLossFilter ?? true}
+                      onChange={(e) => setFormData({ ...formData, strictAntiLossFilter: e.target.checked })}
+                      className="rounded text-cyan-400 focus:ring-0 accent-cyan-500 h-4 w-4 shrink-0"
+                    />
+                  </label>
+
+                  {/* Symbol Cooldown & Trigger Threshold */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1 text-xs font-mono">
+                    <div>
+                      <label className="text-[#848e9c] block mb-1 text-[11px]">
+                        {isAr ? 'عتبة تفعيل Break-Even (% ربح)' : 'Break-Even Trigger (% Profit)'}
+                      </label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        min="0.5"
+                        max="3.0"
+                        value={formData.breakEvenTriggerPercent ?? 1.0}
+                        onChange={(e) => setFormData({ ...formData, breakEvenTriggerPercent: parseFloat(e.target.value) || 1.0 })}
+                        className="w-full bg-[#0b0e11] border border-[#2b2f36] rounded-lg px-2.5 py-1.5 text-cyan-400 font-bold focus:outline-none focus:border-cyan-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[#848e9c] block mb-1 text-[11px]">
+                        {t.symbolCooldownTitle}
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="60"
+                        value={formData.symbolCooldownMinutes ?? 10}
+                        onChange={(e) => setFormData({ ...formData, symbolCooldownMinutes: parseInt(e.target.value) || 10 })}
+                        className="w-full bg-[#0b0e11] border border-[#2b2f36] rounded-lg px-2.5 py-1.5 text-[#eaecef] font-bold focus:outline-none focus:border-cyan-500"
+                      />
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           )}

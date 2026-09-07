@@ -265,6 +265,39 @@ export interface Translations {
   docsTitle: string;
   docsSub: string;
   docsClose: string;
+
+  // Precision Audit & High Assurance
+  precisionAuditTitle: string;
+  precisionAuditSub: string;
+  precisionAuditBadge: string;
+  auditPassedBadge: string;
+  auditPendingBadge: string;
+  auditScoreLabel: string;
+  auditChecksLabel: string;
+  auditSuperMajority: string;
+  auditTrendCascade: string;
+  auditMomentumConfluence: string;
+  auditTrendStrength: string;
+  auditExtensionBuffer: string;
+  auditRiskReward: string;
+  auditTimeFrameAlignment: string;
+  auditOrderbookDepth: string;
+  smartFreezeTitle: string;
+  smartFreezeDesc: string;
+  smartFreezeActive: string;
+  orderbookDepthTitle: string;
+  orderbookLiquidityWalls: string;
+  tfaTitle: string;
+  tfaDesc: string;
+  auditMinScore: string;
+  auditMinConsensus: string;
+  auditMinADX: string;
+  auditMinRR: string;
+  breakEvenStopTitle: string;
+  breakEvenStopDesc: string;
+  strictAntiLossTitle: string;
+  strictAntiLossDesc: string;
+  symbolCooldownTitle: string;
 }
 
 export const translations: Record<Language, Translations> = {
@@ -533,6 +566,30 @@ export const translations: Record<Language, Translations> = {
     docsTitle: 'دليل تشغيل البوت والأنظمة المتكاملة v19.0',
     docsSub: 'توثيق شامل للهيكلية، الاستراتيجيات، إدارة المخاطر، وإرشادات الرفع على الاستضافة',
     docsClose: 'إغلاق الدليل',
+
+    // Precision Audit & High Assurance
+    precisionAuditTitle: 'نظام التدقيق والفحص الفائق لصفقات عالية الدقة',
+    precisionAuditSub: 'فلترة واختبار 6 معايير فنية صارمة لضمان أعلى نسبة نجاح قبل فتح أي صفقة',
+    precisionAuditBadge: 'تدقيق فائق (Ultra Precision)',
+    auditPassedBadge: 'صفقة معتمدة 🛡️',
+    auditPendingBadge: 'قيد الفحص ⚠️',
+    auditScoreLabel: 'درجة التدقيق',
+    auditChecksLabel: 'معايير الفحص الفني الستة',
+    auditSuperMajority: 'إجماع كاسح للاستراتيجيات',
+    auditTrendCascade: 'تسلسل الاتجاه والمتوسطات',
+    auditMomentumConfluence: 'توافق الزخم (RSI & MACD)',
+    auditTrendStrength: 'قوة الاتجاه وفلتر التذبذب (ADX)',
+    auditExtensionBuffer: 'حيز الحركة وتجنب الامتداد',
+    auditRiskReward: 'نسبة العائد للمخاطرة (R:R)',
+    auditMinScore: 'الحد الأدنى لدرجة التدقيق',
+    auditMinConsensus: 'الحد الأدنى لإجماع الاستراتيجيات',
+    auditMinADX: 'الحد الأدنى لقوة الاتجاه (ADX)',
+    auditMinRR: 'الحد الأدنى لنسبة العائد للمخاطرة',
+    breakEvenStopTitle: 'نقل الوقف لسعر الدخول (Break-Even Stop)',
+    breakEvenStopDesc: 'تفعيل نقل وقف الخسارة تلقائياً لنقطة الدخول +0.12% بمجرد تحقيق ربح لمنع أي خسارة على الإطلاق',
+    strictAntiLossTitle: 'فلتر منع الخسائر الصارم (Anti-Loss Shield)',
+    strictAntiLossDesc: 'حظر الصفقات دون متوسط 200 وحظر الشراء عند القمم (RSI > 62) أو البيع عند القيعان (RSI < 38)',
+    symbolCooldownTitle: 'فترة تبريد الرمز بعد الخسارة (دقائق)',
   },
   en: {
     // Brand & Header
@@ -799,5 +856,29 @@ export const translations: Record<Language, Translations> = {
     docsTitle: 'Bot System Manual & Operations Guide v19.0',
     docsSub: 'Architecture overview, 50+ strategy logic, risk guidelines, and hosting deployment',
     docsClose: 'Close Manual',
+
+    // Precision Audit & High Assurance
+    precisionAuditTitle: 'High-Precision Trade Verification & Scrutiny Engine',
+    precisionAuditSub: 'Filtering and testing 6 rigorous technical criteria to ensure maximum probability before opening trades',
+    precisionAuditBadge: 'Ultra Precision',
+    auditPassedBadge: 'Verified 🛡️',
+    auditPendingBadge: 'Auditing ⚠️',
+    auditScoreLabel: 'Audit Score',
+    auditChecksLabel: '6 Technical Quality Pillars',
+    auditSuperMajority: 'Super-Majority Strategy Consensus',
+    auditTrendCascade: 'Trend & Moving Average Cascade',
+    auditMomentumConfluence: 'Momentum Confluence (RSI & MACD)',
+    auditTrendStrength: 'Trend Velocity & ADX Strength',
+    auditExtensionBuffer: 'Volatility Clearance Buffer',
+    auditRiskReward: 'Asymmetric Risk-to-Reward Ratio',
+    auditMinScore: 'Min Audit Score',
+    auditMinConsensus: 'Min Strategy Consensus',
+    auditMinADX: 'Min ADX Strength',
+    auditMinRR: 'Min Risk-Reward Ratio',
+    breakEvenStopTitle: 'Break-Even Stop Protection',
+    breakEvenStopDesc: 'Auto-shifts Stop Loss to Entry +0.12% once trade enters profit to guarantee zero loss',
+    strictAntiLossTitle: 'Strict Anti-Loss Shield',
+    strictAntiLossDesc: 'Enforces EMA200 alignment and blocks top buying (RSI > 62) and bottom shorting (RSI < 38)',
+    symbolCooldownTitle: 'Symbol Loss Cooldown (Minutes)',
   },
 };
