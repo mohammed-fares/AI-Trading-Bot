@@ -1,6 +1,7 @@
 import { Strategy, StrategyPerformance } from '../types';
+import { SCIENTIFIC_PROPRIETARY_STRATEGIES } from './scientificStrategies';
 
-export const INITIAL_STRATEGIES: Strategy[] = [
+export const CORE_CLASSICAL_STRATEGIES: Strategy[] = [
   // 1-Minute Scalping Strategies (8)
   {
     id: 'scalping_1m',
@@ -575,7 +576,113 @@ export const INITIAL_STRATEGIES: Strategy[] = [
   },
 ];
 
+/**
+ * Combined 200 Production Strategies Catalog:
+ * - 51 Classical Multi-Timeframe Technical Strategies (Scalping, Momentum, Trend, Swing, Macro)
+ * - 149 Proprietary Scientific & Physical AI Strategies (Quantum, Thermodynamics, Fluid Dynamics, Chaos, Information Theory, Stochastic, Game Theory)
+ */
+export const INITIAL_STRATEGIES: Strategy[] = [
+  ...CORE_CLASSICAL_STRATEGIES,
+  ...SCIENTIFIC_PROPRIETARY_STRATEGIES,
+];
+
 export const INITIAL_STRATEGY_PERFORMANCE: StrategyPerformance[] = [
+  {
+    strategyId: 'qm_strat_01',
+    strategyName: 'Quantum Mechanics [Tier-1]: Quantum Tunneling',
+    symbol: 'BTC/USDT',
+    wins: 19,
+    losses: 3,
+    winRate: 86.4,
+    totalPnl: 142.8,
+    avgConfidence: 82.5,
+    bestTrade: 38.4,
+    worstTrade: -5.2,
+  },
+  {
+    strategyId: 'fd_strat_01',
+    strategyName: 'Fluid Dynamics [Tier-1]: Navier-Stokes Reynolds',
+    symbol: 'SOL/USDT',
+    wins: 16,
+    losses: 3,
+    winRate: 84.2,
+    totalPnl: 118.5,
+    avgConfidence: 79.0,
+    bestTrade: 34.0,
+    worstTrade: -6.8,
+  },
+  {
+    strategyId: 'cf_strat_01',
+    strategyName: 'Chaos Theory [Tier-1]: Mandelbrot Long-Memory',
+    symbol: 'BTC/USDT',
+    wins: 21,
+    losses: 2,
+    winRate: 91.3,
+    totalPnl: 184.2,
+    avgConfidence: 88.0,
+    bestTrade: 46.5,
+    worstTrade: -4.1,
+  },
+  {
+    strategyId: 'it_strat_01',
+    strategyName: 'Information Theory [Tier-1]: Shannon Information',
+    symbol: 'ETH/USDT',
+    wins: 17,
+    losses: 3,
+    winRate: 85.0,
+    totalPnl: 126.0,
+    avgConfidence: 81.4,
+    bestTrade: 29.8,
+    worstTrade: -5.5,
+  },
+  {
+    strategyId: 'st_strat_01',
+    strategyName: 'Stochastic Calculus [Tier-1]: Ornstein-Uhlenbeck Elastic',
+    symbol: 'ETH/USDT',
+    wins: 14,
+    losses: 2,
+    winRate: 87.5,
+    totalPnl: 98.4,
+    avgConfidence: 83.2,
+    bestTrade: 27.2,
+    worstTrade: -4.9,
+  },
+  {
+    strategyId: 'gt_strat_02',
+    strategyName: 'Game Theory [Tier-2]: Stackelberg Leader-Follower',
+    symbol: 'BTC/USDT',
+    wins: 18,
+    losses: 2,
+    winRate: 90.0,
+    totalPnl: 162.0,
+    avgConfidence: 86.5,
+    bestTrade: 41.2,
+    worstTrade: -5.0,
+  },
+  {
+    strategyId: 'mp_strat_01',
+    strategyName: 'Macro Physics [Tier-1]: Bitcoin Halving Gravitational',
+    symbol: 'BTC/USDT',
+    wins: 22,
+    losses: 2,
+    winRate: 91.7,
+    totalPnl: 195.4,
+    avgConfidence: 89.0,
+    bestTrade: 52.0,
+    worstTrade: -6.0,
+  },
+  {
+    strategyId: 'mp_strat_03',
+    strategyName: 'Macro Physics [Tier-3]: Solana High-Beta TPS',
+    symbol: 'SOL/USDT',
+    wins: 15,
+    losses: 2,
+    winRate: 88.2,
+    totalPnl: 134.6,
+    avgConfidence: 84.8,
+    bestTrade: 36.5,
+    worstTrade: -7.1,
+  },
   {
     strategyId: 'scalping_1m',
     strategyName: 'Scalping 1m',

@@ -65,7 +65,10 @@ import {
   ShieldAlert,
   Sparkles,
   History,
+  Atom,
 } from 'lucide-react';
+import { ScientificStrategyLab } from './components/ScientificStrategyLab';
+import { getStoredSynthesizedStrategies } from './services/aiStrategyGenerator';
 
 // Default assets to seed watchlist with initial PENDING state until first live fetch
 const INITIAL_ASSETS: CryptoAsset[] = [
@@ -375,7 +378,7 @@ export default function App() {
 
   // Bot Operational Status
   const [status, setStatus] = useState<BotStatus>('RUNNING');
-  const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'PROTECTION' | 'AI_ADAPTIVE' | 'TRADES_HISTORY'>('DASHBOARD');
+  const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'PROTECTION' | 'AI_ADAPTIVE' | 'TRADES_HISTORY' | 'SCIENTIFIC_LAB'>('DASHBOARD');
 
   // Config & Portfolio
   const [config, setConfig] = useState<BotConfig>(DEFAULT_CONFIG);
@@ -383,7 +386,15 @@ export default function App() {
   const [selectedSymbol, setSelectedSymbol] = useState<string>('BTCUSDT');
   const [activeTrades, setActiveTrades] = useState<Trade[]>([]);
   const [closedTrades, setClosedTrades] = useState<Trade[]>(INITIAL_CLOSED_TRADES);
-  const [strategies, setStrategies] = useState<Strategy[]>(INITIAL_STRATEGIES);
+  const [strategies, setStrategies] = useState<Strategy[]>(() => {
+    const storedCustom = getStoredSynthesizedStrategies();
+    if (storedCustom.length > 0) {
+      const existingIds = new Set(INITIAL_STRATEGIES.map((s) => s.id));
+      const uniqueCustom = storedCustom.filter((s) => !existingIds.has(s.id));
+      return [...uniqueCustom, ...INITIAL_STRATEGIES];
+    }
+    return INITIAL_STRATEGIES;
+  });
   const [strategyPerformances, setStrategyPerformances] = useState<StrategyPerformance[]>(INITIAL_STRATEGY_PERFORMANCE);
   const [learnedLessons, setLearnedLessons] = useState<AILearnedLesson[]>([]);
 
@@ -1464,12 +1475,46 @@ export default function App() {
 
   const handleEnableAllStrategies = () => {
     setStrategies((prev) => prev.map((s) => ({ ...s, enabled: true })));
-    addLog(isAr ? '✓ تم تفعيل جميع الـ 50+ استراتيجية تداول.' : '✓ Enabled all 50+ strategies.', 'SUCCESS');
+    addLog(isAr ? '✓ تم تفعيل جميع الـ 200+ استراتيجية تداول.' : '✓ Enabled all 200+ strategies.', 'SUCCESS');
   };
 
   const handleDisableAllStrategies = () => {
     setStrategies((prev) => prev.map((s) => ({ ...s, enabled: false })));
     addLog(isAr ? '⚠️ تم تعطيل جميع الاستراتيجيات.' : '⚠️ Disabled all strategies.', 'WARN');
+  };
+
+  const handleEnableAllScientific = () => {
+    setStrategies((prev) =>
+      prev.map((s) => (s.category === 'scientific' || s.isProprietaryAI ? { ...s, enabled: true } : s))
+    );
+    addLog(
+      isAr
+        ? '⚛️ تم تفعيل جميع الاستراتيجيات العلمية والكمومية (149+ استراتيجية).'
+        : '⚛️ Enabled all scientific & quantum strategies (149+).',
+      'SUCCESS'
+    );
+  };
+
+  const handleDisableAllScientific = () => {
+    setStrategies((prev) =>
+      prev.map((s) => (s.category === 'scientific' || s.isProprietaryAI ? { ...s, enabled: false } : s))
+    );
+    addLog(
+      isAr
+        ? '⚠️ تم تعطيل الاستراتيجيات العلمية والفيزيائية مؤقتاً.'
+        : '⚠️ Disabled scientific & quantum strategies temporarily.',
+      'WARN'
+    );
+  };
+
+  const handleAddSynthesizedStrategy = (newStrategy: Strategy) => {
+    setStrategies((prev) => [newStrategy, ...prev.filter((s) => s.id !== newStrategy.id)]);
+    addLog(
+      isAr
+        ? `✨ [ابتكار ذكاء اصطناعي جديد] تم دمج استراتيجية "${newStrategy.arabicName}" لعملة ${newStrategy.applicableSymbols?.join(', ')} في محرك التداول بنجاح!`
+        : `✨ [AI Innovation] Synthesized strategy "${newStrategy.name}" for ${newStrategy.applicableSymbols?.join(', ')} integrated into engine!`,
+      'SUCCESS'
+    );
   };
 
   const handleResetStrategies = () => {
@@ -1638,7 +1683,7 @@ export default function App() {
         <div className="flex items-center gap-2 border-b border-[#2b2f36] pb-2 overflow-x-auto text-xs font-mono">
           <button
             onClick={() => setActiveTab('DASHBOARD')}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl transition font-semibold ${
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl transition font-semibold whitespace-nowrap ${
               activeTab === 'DASHBOARD'
                 ? 'bg-[#1e2329] text-[#fcd535] border border-[#2b2f36] shadow-sm'
                 : 'bg-[#181a20] text-[#848e9c] hover:text-[#eaecef] hover:bg-[#1e2329] border border-transparent'
@@ -1649,8 +1694,23 @@ export default function App() {
           </button>
 
           <button
+            onClick={() => setActiveTab('SCIENTIFIC_LAB')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl transition font-semibold whitespace-nowrap ${
+              activeTab === 'SCIENTIFIC_LAB'
+                ? 'bg-purple-950/60 text-purple-300 border border-purple-500/40 shadow-sm'
+                : 'bg-[#181a20] text-[#848e9c] hover:text-purple-300 hover:bg-[#1e2329] border border-transparent'
+            }`}
+          >
+            <Atom className="h-4 w-4 text-purple-400" />
+            <span>{isAr ? 'مختبر الاستراتيجيات العلمية والكمومية' : 'AI Scientific Lab'}</span>
+            <span className="text-[10px] px-1.5 py-0.2 rounded font-mono bg-purple-900/60 text-purple-200 border border-purple-500/30">
+              {strategies.length}
+            </span>
+          </button>
+
+          <button
             onClick={() => setActiveTab('PROTECTION')}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl transition font-semibold ${
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl transition font-semibold whitespace-nowrap ${
               activeTab === 'PROTECTION'
                 ? 'bg-[#1e2329] text-emerald-400 border border-[#2b2f36] shadow-sm'
                 : 'bg-[#181a20] text-[#848e9c] hover:text-[#eaecef] hover:bg-[#1e2329] border border-transparent'
@@ -1662,7 +1722,7 @@ export default function App() {
 
           <button
             onClick={() => setActiveTab('AI_ADAPTIVE')}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl transition font-semibold ${
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl transition font-semibold whitespace-nowrap ${
               activeTab === 'AI_ADAPTIVE'
                 ? 'bg-[#1e2329] text-[#fcd535] border border-[#2b2f36] shadow-sm'
                 : 'bg-[#181a20] text-[#848e9c] hover:text-[#eaecef] hover:bg-[#1e2329] border border-transparent'
@@ -1674,7 +1734,7 @@ export default function App() {
 
           <button
             onClick={() => setActiveTab('TRADES_HISTORY')}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl transition font-semibold ${
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl transition font-semibold whitespace-nowrap ${
               activeTab === 'TRADES_HISTORY'
                 ? 'bg-[#1e2329] text-sky-400 border border-[#2b2f36] shadow-sm'
                 : 'bg-[#181a20] text-[#848e9c] hover:text-[#eaecef] hover:bg-[#1e2329] border border-transparent'
@@ -1736,6 +1796,19 @@ export default function App() {
                 onForceTrade={handleForceTrade}
               />
             </div>
+          </div>
+        )}
+
+        {activeTab === 'SCIENTIFIC_LAB' && (
+          <div className="space-y-4">
+            <ScientificStrategyLab
+              strategies={strategies}
+              onToggleStrategy={handleToggleStrategy}
+              onUpdateWeight={handleUpdateWeight}
+              onAddSynthesizedStrategy={handleAddSynthesizedStrategy}
+              onEnableAllScientific={handleEnableAllScientific}
+              onDisableAllScientific={handleDisableAllScientific}
+            />
           </div>
         )}
 

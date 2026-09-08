@@ -25,20 +25,25 @@ export const StrategyManagerModal: React.FC<StrategyManagerModalProps> = ({
 }) => {
   const [search, setSearch] = useState('');
   const [activeTab, setActiveTab] = useState<'ALL' | TimeFrame>('ALL');
+  const [activeCategory, setActiveCategory] = useState<'ALL' | Strategy['category']>('ALL');
 
   if (!isOpen) return null;
 
   const filteredStrategies = strategies.filter((s) => {
     const matchesTab = activeTab === 'ALL' || s.timeframe === activeTab;
+    const matchesCategory = activeCategory === 'ALL' || s.category === activeCategory;
     const matchesSearch =
       s.name.toLowerCase().includes(search.toLowerCase()) ||
       s.arabicName.includes(search) ||
       s.indicators.toLowerCase().includes(search.toLowerCase()) ||
+      (s.scientificFormula && s.scientificFormula.toLowerCase().includes(search.toLowerCase())) ||
+      (s.scientificDomain && s.scientificDomain.toLowerCase().includes(search.toLowerCase())) ||
       s.description.includes(search);
-    return matchesTab && matchesSearch;
+    return matchesTab && matchesCategory && matchesSearch;
   });
 
   const enabledCount = strategies.filter((s) => s.enabled).length;
+  const scientificCount = strategies.filter((s) => s.category === 'scientific').length;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/80 backdrop-blur-sm animate-in fade-in">
@@ -51,13 +56,16 @@ export const StrategyManagerModal: React.FC<StrategyManagerModalProps> = ({
             </div>
             <div>
               <h2 className="font-bold text-base text-[#eaecef] flex items-center gap-2">
-                <span>إدارة الاستراتيجيات الـ 50+ (MultiStrategyAI)</span>
+                <span>إدارة مكتبة الاستراتيجيات الـ 200 (MultiStrategyAI 200+ Library)</span>
                 <span className="text-xs font-mono font-normal bg-[#0b0e11] text-[#fcd535] border border-[#2b2f36] px-2 py-0.5 rounded">
                   {enabledCount} / {strategies.length} ACTIVE
                 </span>
+                <span className="text-xs font-mono font-normal bg-purple-950/50 text-purple-300 border border-purple-500/30 px-2 py-0.5 rounded">
+                  {scientificCount} SCIENTIFIC
+                </span>
               </h2>
               <p className="text-xs text-[#848e9c]">
-                التحكم الكامل في تفعيل وتعطيل أوزان استراتيجيات التداول عبر الأطر الزمنية المتعددة
+                التحكم الكامل في تفعيل وتعطيل وأوزان 200 استراتيجية رياضية، فيزيائية وفنية عبر الأطر المتعددة
               </p>
             </div>
           </div>
@@ -80,7 +88,7 @@ export const StrategyManagerModal: React.FC<StrategyManagerModalProps> = ({
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="ابحث عن استراتيجية أو مؤشر (RSI, MACD, EMA)..."
+                placeholder="ابحث بالاسم، المؤشر، المعادلة، أو المجال العلمي..."
                 className="w-full bg-[#1e2329] border border-[#2b2f36] rounded-lg pr-9 pl-3 py-1.5 text-xs text-[#eaecef] placeholder-[#848e9c] focus:outline-none focus:border-[#fcd535]"
               />
             </div>
@@ -109,17 +117,43 @@ export const StrategyManagerModal: React.FC<StrategyManagerModalProps> = ({
             </div>
           </div>
 
+          {/* Category Tabs */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs font-medium border-b border-[#2b2f36]/60 pb-2">
+            <span className="text-[#848e9c] ml-2 font-mono">CATEGORY:</span>
+            {[
+              { id: 'ALL', label: `الكل (${strategies.length})` },
+              { id: 'scientific', label: `🔬 الاستراتيجيات العلمية والفيزيائية (${scientificCount})` },
+              { id: 'scalping', label: '⚡ سكالبنج' },
+              { id: 'momentum', label: '🚀 زخم' },
+              { id: 'trend', label: '📈 اتجاه' },
+              { id: 'swing', label: '🎯 سوينج' },
+              { id: 'daily', label: '📅 يومي' },
+            ].map((cat) => (
+              <button
+                key={cat.id}
+                onClick={() => setActiveCategory(cat.id as any)}
+                className={`px-3 py-1 rounded-lg transition whitespace-nowrap font-mono text-xs ${
+                  activeCategory === cat.id
+                    ? 'bg-purple-600 text-white font-bold shadow-sm'
+                    : 'bg-[#1e2329] text-[#848e9c] hover:text-[#eaecef] hover:bg-[#2b2f36] border border-[#2b2f36]'
+                }`}
+              >
+                {cat.label}
+              </button>
+            ))}
+          </div>
+
           {/* Timeframe Tabs */}
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs font-medium">
             <span className="text-[#848e9c] ml-2 font-mono">TIMEFRAME:</span>
             {[
-              { id: 'ALL', label: 'الكل (50+)' },
-              { id: '1m', label: '1 دقيقة (سكالبنج سريع)' },
-              { id: '5m', label: '5 دقائق (زخم)' },
-              { id: '15m', label: '15 دقيقة (اتجاه)' },
-              { id: '1h', label: '1 ساعة (تتبع الاتجاه)' },
-              { id: '4h', label: '4 ساعات (سوينج)' },
-              { id: '1d', label: 'يومي (اتجاه عام)' },
+              { id: 'ALL', label: 'جميع الأطر' },
+              { id: '1m', label: '1m (سكالبنج)' },
+              { id: '5m', label: '5m (زخم)' },
+              { id: '15m', label: '15m (اتجاه)' },
+              { id: '1h', label: '1h (تأكيد)' },
+              { id: '4h', label: '4h (سوينج)' },
+              { id: '1d', label: '1d (يومي)' },
             ].map((tab) => (
               <button
                 key={tab.id}
@@ -161,8 +195,13 @@ export const StrategyManagerModal: React.FC<StrategyManagerModalProps> = ({
                         <span className="text-[10px] font-mono px-1.5 py-0.2 bg-[#0b0e11] text-[#fcd535] rounded border border-[#2b2f36]">
                           {strat.timeframe}
                         </span>
+                        {strat.scientificDomain && (
+                          <span className="text-[9px] font-mono px-1.5 py-0.2 bg-purple-950/60 text-purple-300 rounded border border-purple-500/30">
+                            {strat.scientificDomain}
+                          </span>
+                        )}
                       </div>
-                      <span className="text-[10px] font-mono text-[#848e9c]">{strat.name}</span>
+                      <span className="text-[10px] font-mono text-[#848e9c] line-clamp-1">{strat.name}</span>
                     </div>
 
                     <button
@@ -180,14 +219,20 @@ export const StrategyManagerModal: React.FC<StrategyManagerModalProps> = ({
                     </button>
                   </div>
 
-                  {/* Indicators Used */}
-                  <div className="text-[11px] text-[#fcd535] bg-[#0b0e11] rounded px-2 py-1 mb-2 border border-[#2b2f36] font-mono">
-                    المؤشرات: {strat.indicators}
-                  </div>
+                  {/* Indicators Used or Formula */}
+                  {strat.scientificFormula ? (
+                    <div className="text-[10px] text-purple-300 bg-[#0b0e11] rounded px-2 py-1 mb-2 border border-purple-500/30 font-mono truncate">
+                      f(x): {strat.scientificFormula}
+                    </div>
+                  ) : (
+                    <div className="text-[11px] text-[#fcd535] bg-[#0b0e11] rounded px-2 py-1 mb-2 border border-[#2b2f36] font-mono truncate">
+                      المؤشرات: {strat.indicators}
+                    </div>
+                  )}
 
                   {/* Description */}
                   <p className="text-[11px] text-[#848e9c] leading-relaxed mb-3 h-10 overflow-hidden text-ellipsis">
-                    {strat.description}
+                    {strat.arabicPrinciple || strat.description}
                   </p>
 
                   {/* Weight Slider */}
@@ -196,16 +241,16 @@ export const StrategyManagerModal: React.FC<StrategyManagerModalProps> = ({
                     <div className="flex items-center gap-2 flex-1 max-w-[140px]">
                       <input
                         type="range"
-                        min="0.5"
+                        min="0.3"
                         max="2.0"
-                        step="0.1"
+                        step="0.05"
                         value={strat.weight}
                         disabled={!strat.enabled}
                         onChange={(e) => onUpdateWeight(strat.id, parseFloat(e.target.value))}
                         className="w-full h-1 bg-[#0b0e11] rounded-lg appearance-none cursor-pointer accent-[#fcd535]"
                       />
                       <span className="font-mono text-[#fcd535] font-bold text-[11px] min-w-[28px]">
-                        {strat.weight.toFixed(1)}x
+                        {strat.weight.toFixed(2)}x
                       </span>
                     </div>
                   </div>

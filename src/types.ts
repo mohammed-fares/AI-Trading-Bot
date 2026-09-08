@@ -34,6 +34,19 @@ export interface BotStats {
   activeSignalsCount: number;
 }
 
+export type ScientificDomain =
+  | 'QUANTUM'
+  | 'THERMODYNAMICS'
+  | 'FLUID_DYNAMICS'
+  | 'CHAOS_FRACTAL'
+  | 'INFORMATION_THEORY'
+  | 'STOCHASTIC'
+  | 'GAME_THEORY'
+  | 'HARMONIC_SPECTRUM'
+  | 'NEURAL_QUANT'
+  | 'MACRO_PROP'
+  | 'CLASSICAL_TECH';
+
 export interface Strategy {
   id: string;
   name: string;
@@ -43,7 +56,20 @@ export interface Strategy {
   description: string;
   enabled: boolean;
   weight: number; // default 1.0
-  category: 'scalping' | 'momentum' | 'trend' | 'swing' | 'daily';
+  category: 'scalping' | 'momentum' | 'trend' | 'swing' | 'daily' | 'scientific';
+  // Scientific & Asset-Specific Dimensions
+  scientificDomain?: ScientificDomain;
+  scientificFormula?: string;
+  scientificPrinciple?: string;
+  arabicPrinciple?: string;
+  applicableSymbols?: string[]; // e.g. ['BTCUSDT'], ['SOLUSDT'], ['ALL']
+  coinSuitabilityReason?: string;
+  arabicSuitabilityReason?: string;
+  isProprietaryAI?: boolean;
+  winRateEstimate?: number;
+  auditScoreEstimate?: number;
+  mathModelComplexity?: 'STANDARD' | 'ADVANCED' | 'QUANTUM_GRADE';
+  createdAt?: number;
 }
 
 export interface StrategyPerformance {

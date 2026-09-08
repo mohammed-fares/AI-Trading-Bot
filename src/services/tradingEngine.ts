@@ -531,6 +531,7 @@ export function getRegimeStrategyBoost(category: Strategy['category'], regime: M
     case 'BULL_TREND':
     case 'BEAR_TREND':
       if (category === 'trend') return 1.45;
+      if (category === 'scientific') return 1.35;
       if (category === 'momentum') return 1.25;
       if (category === 'swing') return 1.2;
       if (category === 'scalping') return 0.9;
@@ -538,11 +539,13 @@ export function getRegimeStrategyBoost(category: Strategy['category'], regime: M
 
     case 'RANGE_BOUND':
       if (category === 'scalping') return 1.4;
+      if (category === 'scientific') return 1.3;
       if (category === 'momentum') return 1.15;
       if (category === 'trend') return 0.75;
       return 1.0;
 
     case 'HIGH_VOLATILITY':
+      if (category === 'scientific') return 1.4;
       if (category === 'scalping') return 1.35;
       if (category === 'momentum') return 1.3;
       if (category === 'swing') return 0.7;
@@ -555,7 +558,10 @@ export function getRegimeStrategyBoost(category: Strategy['category'], regime: M
 }
 
 /**
- * Evaluates Ensemble Signal incorporating Market Regime and adaptive strategy weights
+ * Evaluates Ensemble Signal incorporating Market Regime and adaptive strategy weights.
+ * Applies Intelligent Asset-Specific Strategy Specialization:
+ * Rather than scanning all 200 strategies indiscriminately, each coin receives its
+ * specialized, high-conviction mathematical and technical strategy subset.
  * If asset has invalid market data, returns strictly NEUTRAL.
  */
 export function evaluateEnsembleSignal(
@@ -577,9 +583,25 @@ export function evaluateEnsembleSignal(
   let longScore = 0;
   let shortScore = 0;
 
-  const enabledStrategies = strategies.filter((s) => s.enabled);
+  // Normalized asset symbol (e.g. BTCUSDT from BTC/USDT or BTCUSDT)
+  const normSymbol = asset.symbol.replace(/[\/\-_]/g, '').toUpperCase();
 
-  enabledStrategies.forEach((strategy) => {
+  // Intelligent Asset-Specific Strategy Filtering:
+  // Not all 200 strategies are evaluated for every single coin!
+  // Each asset is evaluated against strategies tailored for it, or universal strategies.
+  const applicableStrategies = strategies.filter((s) => {
+    if (!s.enabled) return false;
+    // If strategy has explicit applicableSymbols, ensure current asset matches (or 'ALL')
+    if (s.applicableSymbols && s.applicableSymbols.length > 0 && !s.applicableSymbols.includes('ALL')) {
+      const isMatch = s.applicableSymbols.some(
+        (sym) => sym.replace(/[\/\-_]/g, '').toUpperCase() === normSymbol
+      );
+      if (!isMatch) return false;
+    }
+    return true;
+  });
+
+  applicableStrategies.forEach((strategy) => {
     let stratSignal: 'LONG' | 'SHORT' | 'NEUTRAL' = 'NEUTRAL';
     let stratConfidence = 0.55;
 
