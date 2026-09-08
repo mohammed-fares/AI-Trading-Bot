@@ -91,16 +91,44 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           </div>
 
-          {/* Trading Mode Badge: Locked to PAPER MODE ONLY for safety */}
+          {/* Trading Mode Badge & Seamless Switcher */}
           <div className="flex items-center gap-2">
-            <div className="flex items-center bg-[#12161c] px-2.5 py-1 rounded-lg border border-[#2b2f36] gap-2">
-              <span className="flex items-center gap-1.5 text-xs font-mono text-emerald-400 font-bold">
-                <FileCode className="h-3.5 w-3.5 text-emerald-400" />
-                <span>{isAr ? 'حساب تجريبي (ورقي)' : 'PAPER TRADING'}</span>
-              </span>
-              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/30">
-                {isAr ? 'التداول الحقيقي معطل للأمان' : 'Real Execution Disabled'}
-              </span>
+            <div className="flex items-center bg-[#12161c] p-1 rounded-lg border border-[#2b2f36]">
+              <button
+                id="trading-mode-toggle-paper"
+                onClick={() => {
+                  if (tradingMode !== 'PAPER' && onToggleTradingMode) {
+                    onToggleTradingMode();
+                  }
+                }}
+                className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-mono transition ${
+                  tradingMode === 'PAPER'
+                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 shadow-sm font-bold'
+                    : 'text-[#848e9c] hover:text-[#eaecef]'
+                }`}
+                title={t.modePaperDesc}
+              >
+                <FileCode className="h-3 w-3 text-emerald-400" />
+                <span>{isAr ? 'تجريبي (بيانات حية)' : 'Paper (Live)'}</span>
+              </button>
+
+              <button
+                id="trading-mode-toggle-real"
+                onClick={() => {
+                  if (tradingMode !== 'REAL' && onToggleTradingMode) {
+                    onToggleTradingMode();
+                  }
+                }}
+                className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-mono transition ${
+                  tradingMode === 'REAL'
+                    ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40 shadow-sm font-bold'
+                    : 'text-[#848e9c] hover:text-[#eaecef]'
+                }`}
+                title={t.modeRealDesc}
+              >
+                <Radio className="h-3 w-3 animate-pulse text-amber-400" />
+                <span>{isAr ? 'حقيقي (Binance API)' : 'Real (Live API)'}</span>
+              </button>
             </div>
 
             {/* System Status Pill */}

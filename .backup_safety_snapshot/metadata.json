@@ -1,0 +1,7 @@
+{
+  "name": "AI Trading Bot v19.0",
+  "description": "نظام تداول آلي متكامل لعقود Binance المستقبلية مدعوم بـ 50+ استراتيجية وإدارة مخاطر تكيفية وذكاء اصطناعي",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+

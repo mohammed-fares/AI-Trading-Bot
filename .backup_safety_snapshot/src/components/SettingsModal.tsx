@@ -251,34 +251,32 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div
                     onClick={() => setFormData({ ...formData, tradingMode: 'PAPER' })}
-                    className="p-3.5 rounded-xl border cursor-pointer transition bg-emerald-500/10 border-emerald-500/50 shadow-sm"
+                    className={`p-3.5 rounded-xl border cursor-pointer transition ${
+                      formData.tradingMode === 'PAPER'
+                        ? 'bg-emerald-500/10 border-emerald-500/50 shadow-sm'
+                        : 'bg-[#1e2329] border-[#2b2f36] hover:border-[#3b404a]'
+                    }`}
                   >
                     <div className="flex items-center gap-2 mb-1">
                       <FileCode className="h-4 w-4 text-emerald-400" />
                       <span className="font-bold text-[#eaecef]">{t.settingsPaperLabel}</span>
-                      <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono">
-                        نشط / Active
-                      </span>
                     </div>
                     <p className="text-[11px] text-[#848e9c]">{t.modePaperDesc}</p>
                   </div>
 
                   <div
-                    className="p-3.5 rounded-xl border transition bg-[#1e2329]/50 border-[#2b2f36] opacity-60 cursor-not-allowed"
-                    title="Real trading is strictly disabled for risk protection."
+                    onClick={() => setFormData({ ...formData, tradingMode: 'REAL' })}
+                    className={`p-3.5 rounded-xl border cursor-pointer transition ${
+                      formData.tradingMode === 'REAL'
+                        ? 'bg-amber-500/10 border-amber-500/50 shadow-sm'
+                        : 'bg-[#1e2329] border-[#2b2f36] hover:border-[#3b404a]'
+                    }`}
                   >
                     <div className="flex items-center gap-2 mb-1">
-                      <Radio className="h-4 w-4 text-[#848e9c]" />
-                      <span className="font-bold text-[#848e9c]">{t.settingsRealLabel}</span>
-                      <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-mono">
-                        معطل للأمان / Locked
-                      </span>
+                      <Radio className="h-4 w-4 text-amber-400" />
+                      <span className="font-bold text-[#eaecef]">{t.settingsRealLabel}</span>
                     </div>
-                    <p className="text-[11px] text-[#848e9c]">
-                      {isAr
-                        ? 'PAPER MODE ONLY (التداول الحقيقي معطل برمجياً لضمان سلامة رأس المال)'
-                        : 'PAPER MODE ONLY (Real execution disabled for safety protection)'}
-                    </p>
+                    <p className="text-[11px] text-[#848e9c]">{t.modeRealDesc}</p>
                   </div>
                 </div>
               </div>

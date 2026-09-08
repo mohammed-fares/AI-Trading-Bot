@@ -103,47 +103,30 @@ export const WatchlistPanel: React.FC<WatchlistPanelProps> = ({
               </div>
 
               {/* Technical Indicators & Trend */}
-              {asset.dataStatus === 'DATA_INVALID' ? (
-                <div className="bg-rose-500/10 rounded-lg p-2 border border-rose-500/30 mb-2 text-xs space-y-1 font-mono">
-                  <div className="flex items-center justify-between text-[11px] text-rose-400 font-bold">
-                    <span>{isAr ? 'حالة البيانات:' : 'Data Status:'}</span>
-                    <span className="px-1.5 py-0.5 rounded bg-rose-500/20 border border-rose-500/40">
-                      DATA_INVALID
-                    </span>
-                  </div>
-                  <p className="text-[10px] text-rose-300">
-                    {asset.lastDataError || (isAr ? 'فشل جلب بيانات بينانس أو البيانات قديمة' : 'Binance data missing or stale')}
-                  </p>
-                  <div className="text-[10px] font-bold text-amber-300">
-                    ⛔ {isAr ? 'التداول معطل (NO TRADE)' : 'NO TRADE'}
-                  </div>
+              <div className="bg-[#0b0e11] rounded-lg p-2 border border-[#2b2f36] mb-2 text-xs space-y-1 font-mono">
+                <div className="flex items-center justify-between text-[10px]">
+                  <span className="text-[#848e9c]">{t.trendLabel}:</span>
+                  <span
+                    className={`font-semibold px-1.5 py-0.2 rounded ${
+                      isUpTrend
+                        ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                        : isDownTrend
+                        ? 'bg-red-500/10 text-red-400 border border-red-500/30'
+                        : 'bg-[#181a20] text-[#848e9c] border border-[#2b2f36]'
+                    }`}
+                  >
+                    {isUpTrend ? '🟢 UP' : isDownTrend ? '🔴 DOWN' : '⚪ FLAT'}
+                  </span>
                 </div>
-              ) : (
-                <div className="bg-[#0b0e11] rounded-lg p-2 border border-[#2b2f36] mb-2 text-xs space-y-1 font-mono">
-                  <div className="flex items-center justify-between text-[10px]">
-                    <span className="text-[#848e9c]">{t.trendLabel}:</span>
-                    <span
-                      className={`font-semibold px-1.5 py-0.2 rounded ${
-                        isUpTrend
-                          ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
-                          : isDownTrend
-                          ? 'bg-red-500/10 text-red-400 border border-red-500/30'
-                          : 'bg-[#181a20] text-[#848e9c] border border-[#2b2f36]'
-                      }`}
-                    >
-                      {isUpTrend ? '🟢 UP' : isDownTrend ? '🔴 DOWN' : '⚪ FLAT'}
-                    </span>
-                  </div>
 
-                  <div className="flex items-center justify-between text-[10px] text-[#848e9c] pt-1 border-t border-[#2b2f36]">
-                    <span>RSI: <strong className="text-[#eaecef]">{asset.rsi.toFixed(0)}</strong></span>
-                    <span>MACD: <strong className={asset.macdSignal === 'BULLISH' ? 'text-emerald-400' : 'text-red-400'}>
-                      {asset.macdSignal === 'BULLISH' ? 'BULL' : 'BEAR'}
-                    </strong></span>
-                    <span>ADX: <strong className="text-[#fcd535]">{asset.adx.toFixed(0)}</strong></span>
-                  </div>
+                <div className="flex items-center justify-between text-[10px] text-[#848e9c] pt-1 border-t border-[#2b2f36]">
+                  <span>RSI: <strong className="text-[#eaecef]">{asset.rsi.toFixed(0)}</strong></span>
+                  <span>MACD: <strong className={asset.macdSignal === 'BULLISH' ? 'text-emerald-400' : 'text-red-400'}>
+                    {asset.macdSignal === 'BULLISH' ? 'BULL' : 'BEAR'}
+                  </strong></span>
+                  <span>ADX: <strong className="text-[#fcd535]">{asset.adx.toFixed(0)}</strong></span>
                 </div>
-              )}
+              </div>
 
               {/* High-Precision Quality Audit Status */}
               {hasAudit && (

@@ -97,48 +97,6 @@ export interface TimeFrameData {
   ema50: number;
   rsi: number;
   macdSignal: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
-  closePrice?: number;
-  candleTimestamp?: number;
-  isComplete?: boolean;
-}
-
-export type KlineInterval = '15m' | '1h' | '4h';
-
-export interface BinanceKline {
-  openTime: number;
-  open: number;
-  high: number;
-  low: number;
-  close: number;
-  volume: number;
-  closeTime: number;
-  isClosed: boolean;
-}
-
-export interface MarketDataResult<T> {
-  success: boolean;
-  data: T | null;
-  error?: string;
-  timestamp: number;
-  source: 'BINANCE_FUTURES';
-  isFresh: boolean;
-}
-
-export interface PersistedBotStateV20 {
-  version: 'v20';
-  savedAt: number;
-  config: BotConfig;
-  balance: number;
-  initialBalance: number;
-  peakBalance: number;
-  activeTrades: Trade[];
-  closedTrades: Trade[];
-  strategyPerformances: StrategyPerformance[];
-  learnedLessons: AILearnedLesson[];
-  adaptiveState?: AIAdaptiveState;
-  adaptiveConfidenceState?: AdaptiveConfidenceState;
-  circuitBreakerState?: CircuitBreakerState;
-  lossCooldowns?: Record<string, number>;
 }
 
 export interface TimeFrameAlignment {
@@ -223,9 +181,6 @@ export interface CryptoAsset {
   orderbookDepth?: OrderbookDepthAnalysis;
   // Smart Freeze state
   smartFreeze?: SmartFreezeInfo;
-  // Market Data Validity
-  dataStatus?: 'VALID' | 'DATA_INVALID' | 'PENDING';
-  lastDataError?: string;
 }
 
 export interface Trade {

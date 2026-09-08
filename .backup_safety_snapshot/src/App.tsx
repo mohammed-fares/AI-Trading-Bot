@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Header,
   DashboardStats,
@@ -32,7 +32,6 @@ import {
   MarketSentiment,
   MarketRegime,
   AILearnedLesson,
-  TimeFrameData,
 } from './types';
 
 import { INITIAL_STRATEGIES, INITIAL_STRATEGY_PERFORMANCE } from './data/strategies';
@@ -48,15 +47,12 @@ import {
   auditTradeSetup,
   calculateTimeFrameAlignment,
   detectSmartFreeze,
-  calculateIndicatorsFromKlines,
-  calculateEMA,
-  calculateRSI,
-  calculateMACD,
 } from './services/tradingEngine';
 import {
   fetchLiveBinancePrices,
-  fetchBinanceKlines,
-  fetchBinanceOrderbookDepth,
+  generateRealisticOrderbookDepth,
+  placeBinanceFuturesOrder,
+  fetchBinanceFuturesAccount,
 } from './services/binanceService';
 import { useLanguage } from './i18n/LanguageContext';
 
@@ -67,273 +63,263 @@ import {
   History,
 } from 'lucide-react';
 
-// Default assets to seed watchlist with initial PENDING state until first live fetch
+// Default assets to seed watchlist
 const INITIAL_ASSETS: CryptoAsset[] = [
   {
     symbol: 'BTCUSDT',
     name: 'Bitcoin',
-    price: 0,
-    change24h: 0,
+    price: 68450.0,
+    change24h: 2.34,
     sector: 'Layer 1',
-    rsi: 50,
-    macdSignal: 'NEUTRAL',
-    adx: 20,
-    ema20: 0,
-    ema50: 0,
-    ema200: 0,
-    trend: 'NEUTRAL',
-    ensembleSignal: 'NEUTRAL',
-    confidence: 0,
-    longScore: 0,
-    shortScore: 0,
-    dataStatus: 'PENDING',
+    rsi: 58.4,
+    macdSignal: 'BULLISH',
+    adx: 32.1,
+    ema20: 67900,
+    ema50: 66800,
+    ema200: 63500,
+    trend: 'UP',
+    ensembleSignal: 'LONG',
+    confidence: 76.5,
+    longScore: 3.8,
+    shortScore: 1.1,
   },
   {
     symbol: 'ETHUSDT',
     name: 'Ethereum',
-    price: 0,
-    change24h: 0,
+    price: 3520.5,
+    change24h: 1.82,
     sector: 'Smart Contracts',
-    rsi: 50,
-    macdSignal: 'NEUTRAL',
-    adx: 20,
-    ema20: 0,
-    ema50: 0,
-    ema200: 0,
-    trend: 'NEUTRAL',
-    ensembleSignal: 'NEUTRAL',
-    confidence: 0,
-    longScore: 0,
-    shortScore: 0,
-    dataStatus: 'PENDING',
+    rsi: 54.2,
+    macdSignal: 'BULLISH',
+    adx: 28.6,
+    ema20: 3480,
+    ema50: 3410,
+    ema200: 3200,
+    trend: 'UP',
+    ensembleSignal: 'LONG',
+    confidence: 72.0,
+    longScore: 3.2,
+    shortScore: 1.2,
   },
   {
     symbol: 'SOLUSDT',
     name: 'Solana',
-    price: 0,
-    change24h: 0,
+    price: 148.75,
+    change24h: -0.65,
     sector: 'Layer 1',
-    rsi: 50,
-    macdSignal: 'NEUTRAL',
-    adx: 20,
-    ema20: 0,
-    ema50: 0,
-    ema200: 0,
-    trend: 'NEUTRAL',
-    ensembleSignal: 'NEUTRAL',
-    confidence: 0,
-    longScore: 0,
-    shortScore: 0,
-    dataStatus: 'PENDING',
+    rsi: 48.9,
+    macdSignal: 'BEARISH',
+    adx: 22.4,
+    ema20: 151.2,
+    ema50: 153.8,
+    ema200: 142.0,
+    trend: 'DOWN',
+    ensembleSignal: 'SHORT',
+    confidence: 68.2,
+    longScore: 1.4,
+    shortScore: 3.6,
   },
   {
     symbol: 'BNBUSDT',
-    name: 'BNB',
-    price: 0,
-    change24h: 0,
-    sector: 'Exchange',
-    rsi: 50,
-    macdSignal: 'NEUTRAL',
-    adx: 20,
-    ema20: 0,
-    ema50: 0,
-    ema200: 0,
-    trend: 'NEUTRAL',
-    ensembleSignal: 'NEUTRAL',
-    confidence: 0,
-    longScore: 0,
-    shortScore: 0,
-    dataStatus: 'PENDING',
+    name: 'BNB Chain',
+    price: 588.2,
+    change24h: 0.95,
+    sector: 'Exchange / L1',
+    rsi: 61.2,
+    macdSignal: 'BULLISH',
+    adx: 26.5,
+    ema20: 582.0,
+    ema50: 575.0,
+    ema200: 540.0,
+    trend: 'UP',
+    ensembleSignal: 'LONG',
+    confidence: 74.0,
+    longScore: 3.5,
+    shortScore: 0.9,
   },
   {
     symbol: 'ADAUSDT',
     name: 'Cardano',
-    price: 0,
-    change24h: 0,
+    price: 0.465,
+    change24h: -1.45,
     sector: 'Layer 1',
-    rsi: 50,
-    macdSignal: 'NEUTRAL',
-    adx: 20,
-    ema20: 0,
-    ema50: 0,
-    ema200: 0,
-    trend: 'NEUTRAL',
-    ensembleSignal: 'NEUTRAL',
-    confidence: 0,
-    longScore: 0,
-    shortScore: 0,
-    dataStatus: 'PENDING',
+    rsi: 42.1,
+    macdSignal: 'BEARISH',
+    adx: 19.8,
+    ema20: 0.472,
+    ema50: 0.48,
+    ema200: 0.495,
+    trend: 'DOWN',
+    ensembleSignal: 'SHORT',
+    confidence: 65.0,
+    longScore: 1.2,
+    shortScore: 3.1,
   },
   {
     symbol: 'XRPUSDT',
     name: 'Ripple',
-    price: 0,
-    change24h: 0,
+    price: 0.582,
+    change24h: 3.12,
     sector: 'Payments',
-    rsi: 50,
-    macdSignal: 'NEUTRAL',
-    adx: 20,
-    ema20: 0,
-    ema50: 0,
-    ema200: 0,
-    trend: 'NEUTRAL',
-    ensembleSignal: 'NEUTRAL',
-    confidence: 0,
-    longScore: 0,
-    shortScore: 0,
-    dataStatus: 'PENDING',
+    rsi: 66.8,
+    macdSignal: 'BULLISH',
+    adx: 34.2,
+    ema20: 0.565,
+    ema50: 0.55,
+    ema200: 0.52,
+    trend: 'UP',
+    ensembleSignal: 'LONG',
+    confidence: 79.5,
+    longScore: 4.1,
+    shortScore: 0.8,
   },
   {
     symbol: 'AVAXUSDT',
     name: 'Avalanche',
-    price: 0,
-    change24h: 0,
+    price: 28.45,
+    change24h: 1.25,
     sector: 'Layer 1',
-    rsi: 50,
+    rsi: 52.6,
     macdSignal: 'NEUTRAL',
-    adx: 20,
-    ema20: 0,
-    ema50: 0,
-    ema200: 0,
+    adx: 21.0,
+    ema20: 28.1,
+    ema50: 27.9,
+    ema200: 29.5,
     trend: 'NEUTRAL',
     ensembleSignal: 'NEUTRAL',
-    confidence: 0,
-    longScore: 0,
-    shortScore: 0,
-    dataStatus: 'PENDING',
+    confidence: 50.0,
+    longScore: 2.0,
+    shortScore: 2.0,
   },
   {
     symbol: 'LINKUSDT',
     name: 'Chainlink',
-    price: 0,
-    change24h: 0,
-    sector: 'Oracle',
-    rsi: 50,
-    macdSignal: 'NEUTRAL',
-    adx: 20,
-    ema20: 0,
-    ema50: 0,
-    ema200: 0,
-    trend: 'NEUTRAL',
-    ensembleSignal: 'NEUTRAL',
-    confidence: 0,
-    longScore: 0,
-    shortScore: 0,
-    dataStatus: 'PENDING',
+    price: 16.4,
+    change24h: 4.85,
+    sector: 'Oracle / DeFi',
+    rsi: 71.3,
+    macdSignal: 'BULLISH',
+    adx: 38.9,
+    ema20: 15.6,
+    ema50: 14.9,
+    ema200: 13.8,
+    trend: 'UP',
+    ensembleSignal: 'LONG',
+    confidence: 82.0,
+    longScore: 4.3,
+    shortScore: 0.6,
   },
 ];
 
+// Seed recent benchmark closed trades
 const INITIAL_CLOSED_TRADES: Trade[] = [
   {
     id: 'tr-seed-1',
     symbol: 'BTCUSDT',
     side: 'LONG',
-    entryPrice: 67200.0,
-    currentPrice: 68600.0,
-    closePrice: 68600.0,
+    entryPrice: 67100,
+    closePrice: 68450,
+    currentPrice: 68450,
     margin: 50.0,
     notional: 1000.0,
-    size: 0.0148,
+    size: 0.015,
     leverage: 20,
-    pnl: 20.72,
-    pnlPercent: 41.4,
-    stopLoss: 65856.0,
-    takeProfit: 71232.0,
-    confidence: 84,
-    openedAt: Date.now() - 1000 * 60 * 120,
-    closedAt: Date.now() - 1000 * 60 * 45,
+    pnl: 20.15,
+    pnlPercent: 40.3,
+    stopLoss: 65758,
+    takeProfit: 70455,
+    confidence: 76,
+    openedAt: Date.now() - 3600000 * 4,
+    closedAt: Date.now() - 3600000 * 2,
     exitReason: 'TAKE_PROFIT',
     strategyUsed: 'Trend Following 1h',
-    peakPnlPercent: 41.4,
-    auditScore: 92,
+    peakPnlPercent: 42.0,
   },
   {
     id: 'tr-seed-2',
     symbol: 'ETHUSDT',
     side: 'LONG',
-    entryPrice: 3450.0,
-    currentPrice: 3530.0,
-    closePrice: 3530.0,
-    margin: 40.0,
-    notional: 800.0,
-    size: 0.2318,
+    entryPrice: 3450,
+    closePrice: 3510,
+    currentPrice: 3510,
+    margin: 45.0,
+    notional: 900.0,
+    size: 0.26,
     leverage: 20,
-    pnl: 18.54,
-    pnlPercent: 46.3,
-    stopLoss: 3381.0,
-    takeProfit: 3657.0,
-    confidence: 79,
-    openedAt: Date.now() - 1000 * 60 * 180,
-    closedAt: Date.now() - 1000 * 60 * 95,
-    exitReason: 'TAKE_PROFIT',
-    strategyUsed: 'MACD ZeroCross 15m',
-    peakPnlPercent: 46.3,
-    auditScore: 88,
+    pnl: 15.65,
+    pnlPercent: 34.7,
+    stopLoss: 3381,
+    takeProfit: 3622,
+    confidence: 72,
+    openedAt: Date.now() - 3600000 * 3,
+    closedAt: Date.now() - 3600000 * 1,
+    exitReason: 'TRAILING_STOP',
+    strategyUsed: 'MACD Momentum 15m',
+    peakPnlPercent: 38.0,
   },
   {
     id: 'tr-seed-3',
     symbol: 'SOLUSDT',
     side: 'SHORT',
     entryPrice: 152.0,
-    currentPrice: 155.0,
-    closePrice: 155.0,
-    margin: 35.0,
-    notional: 700.0,
-    size: 4.605,
+    closePrice: 155.04,
+    currentPrice: 155.04,
+    margin: 40.0,
+    notional: 800.0,
+    size: 5.26,
     leverage: 20,
-    pnl: -13.81,
-    pnlPercent: -39.4,
-    stopLoss: 155.8,
-    takeProfit: 142.8,
-    confidence: 68,
-    openedAt: Date.now() - 1000 * 60 * 240,
-    closedAt: Date.now() - 1000 * 60 * 160,
+    pnl: -8.0,
+    pnlPercent: -20.0,
+    stopLoss: 155.04,
+    takeProfit: 144.4,
+    confidence: 65,
+    openedAt: Date.now() - 3600000 * 6,
+    closedAt: Date.now() - 3600000 * 5,
     exitReason: 'STOP_LOSS',
     strategyUsed: 'RSI Reversal 5m',
-    peakPnlPercent: 5.2,
-    auditScore: 72,
+    peakPnlPercent: 5.0,
   },
 ];
 
 const DEFAULT_CONFIG: BotConfig = {
-  tradingMode: 'PAPER', // STRICTLY LOCKED TO PAPER MODE ONLY
-  binanceNetwork: 'TESTNET',
-  binanceApiKey: '',
-  binanceApiSecret: '',
-  minConfidence: 20,
-  maxConfidence: 90,
+  balance: 1000.0,
+  initialBalance: 1000.0,
+  peakBalance: 1027.8,
+  maxDailyRisk: 2.0,
+  maxTradeRisk: 0.3,
+  leverage: 20,
+  timeframe: '1h',
+  minScore: 25,
+  minConfidence: 15,
+  maxConfidence: 75,
   currentConfidence: 75,
   confidenceStep: 5,
-  minScore: 25,
   maxOpenTrades: 4,
-  leverage: 20,
-  tradeSizePercent: 5,
-  maxDailyRisk: 3.5,
-  maxTradeRisk: 0.5,
-  stopLossPercent: 2.0,
-  takeProfitPercent: 5.5,
-  trailingStopTriggerPercent: 2.2,
-  trailingStopDeltaPercent: 0.8,
-  timeExitMinutes: 30,
-  timeExitMinProfit: 0.8,
-  profitRetraceThreshold: 3.0,
-  profitRetraceDropRatio: 0.4,
+  tradeSizePercent: 5.0,
+  stopLossPercent: 1.5,
+  takeProfitPercent: 3.8,
+  maxDrawdownPercent: 10.0,
+  trailingStopTriggerPercent: 1.2,
+  trailingStopDeltaPercent: 0.6,
+  timeExitMinutes: 5,
+  timeExitMinProfit: 0.3,
+  profitRetraceThreshold: 1.8,
+  profitRetraceDropRatio: 0.35,
   maxConsecutiveLosses: 5,
   circuitBreakerCooldownMin: 30,
   maxDailyLosses: 10,
-  maxDrawdownPercent: 10,
   cycleIntervalSeconds: 15,
-  testnetMode: true,
-  pureSelfLearning: false,
-  timeframe: '15m',
   useTrendFilter: true,
   useSmartExit: true,
-  balance: 1000.0,
-  initialBalance: 1000.0,
-  peakBalance: 1000.0,
+  testnetMode: true,
+  tradingMode: 'PAPER',
+  binanceApiKey: '',
+  binanceApiSecret: '',
+  binanceNetwork: 'TESTNET',
+  pureSelfLearning: true,
   precisionAuditMode: true,
   minAuditScore: 78,
-  minConsensusRatio: 0.7,
+  minConsensusRatio: 0.70,
   minADXThreshold: 22,
   requireRRRatio: 2.2,
   useBreakEvenStop: true,
@@ -348,50 +334,211 @@ const DEFAULT_CONFIG: BotConfig = {
   smartFreezeDurationMinutes: 15,
 };
 
-interface PersistentStateV20 {
-  schemaVersion: 20;
-  savedAt: number;
-  config: BotConfig;
-  balance: number;
-  initialBalance: number;
-  peakBalance: number;
-  activeTrades: Trade[];
-  closedTrades: Trade[];
-  strategyPerformances: StrategyPerformance[];
-  learnedLessons: AILearnedLesson[];
-  confidenceState?: AdaptiveConfidenceState;
-  aiAdaptiveState?: AIAdaptiveState;
-  circuitBreaker?: CircuitBreakerState;
-  lossCooldowns?: Record<string, number>;
-}
+// Pre-calculate full market intelligence for instant, rich initial render
+const SEED_ASSETS: CryptoAsset[] = INITIAL_ASSETS.map((asset) => {
+  const tfa = calculateTimeFrameAlignment(asset);
+  const freeze = detectSmartFreeze(
+    asset.symbol,
+    [{ price: asset.price, timestamp: Date.now() - 5 * 60 * 1000 }],
+    DEFAULT_CONFIG,
+    asset.price
+  );
+  const obDepth = generateRealisticOrderbookDepth(
+    asset.symbol,
+    asset.price,
+    asset.ensembleSignal === 'NEUTRAL' ? undefined : asset.ensembleSignal,
+    DEFAULT_CONFIG.maxOpposingWallDistancePct || 2.5
+  );
+  const audit =
+    asset.ensembleSignal !== 'NEUTRAL'
+      ? auditTradeSetup(asset, asset.ensembleSignal, DEFAULT_CONFIG, 'BULL_TREND', INITIAL_STRATEGIES)
+      : undefined;
 
-const STORAGE_KEY_V20 = 'ai_trading_bot_state_v20';
+  return {
+    ...asset,
+    timeframeAlignment: tfa,
+    smartFreeze: freeze,
+    orderbookDepth: obDepth,
+    auditScore: audit?.auditScore,
+    auditPassed: audit?.passed,
+    auditVerification: audit,
+  };
+});
 
 export default function App() {
   const { t, isAr } = useLanguage();
 
-  // State Hydration tracking
-  const [isHydrated, setIsHydrated] = useState(false);
+  // Load saved config if present
+  const [config, setConfig] = useState<BotConfig>(() => {
+    try {
+      const saved = localStorage.getItem('ai_trading_bot_config_v19');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return {
+          ...DEFAULT_CONFIG,
+          ...parsed,
+          precisionAuditMode: parsed.precisionAuditMode ?? DEFAULT_CONFIG.precisionAuditMode,
+          minAuditScore: parsed.minAuditScore ?? DEFAULT_CONFIG.minAuditScore,
+          minConsensusRatio: parsed.minConsensusRatio ?? DEFAULT_CONFIG.minConsensusRatio,
+          minADXThreshold: parsed.minADXThreshold ?? DEFAULT_CONFIG.minADXThreshold,
+          requireRRRatio: parsed.requireRRRatio ?? DEFAULT_CONFIG.requireRRRatio,
+          useBreakEvenStop: parsed.useBreakEvenStop ?? DEFAULT_CONFIG.useBreakEvenStop,
+          breakEvenTriggerPercent: parsed.breakEvenTriggerPercent ?? DEFAULT_CONFIG.breakEvenTriggerPercent,
+          strictAntiLossFilter: parsed.strictAntiLossFilter ?? DEFAULT_CONFIG.strictAntiLossFilter,
+          symbolCooldownMinutes: parsed.symbolCooldownMinutes ?? DEFAULT_CONFIG.symbolCooldownMinutes,
+          enforceTimeFrameAlignment: parsed.enforceTimeFrameAlignment ?? DEFAULT_CONFIG.enforceTimeFrameAlignment,
+          orderbookFilterEnabled: parsed.orderbookFilterEnabled ?? DEFAULT_CONFIG.orderbookFilterEnabled,
+          maxOpposingWallDistancePct: parsed.maxOpposingWallDistancePct ?? DEFAULT_CONFIG.maxOpposingWallDistancePct,
+          smartFreezeEnabled: parsed.smartFreezeEnabled ?? DEFAULT_CONFIG.smartFreezeEnabled,
+          smartFreezeThresholdPercent: parsed.smartFreezeThresholdPercent ?? DEFAULT_CONFIG.smartFreezeThresholdPercent,
+          smartFreezeDurationMinutes: parsed.smartFreezeDurationMinutes ?? DEFAULT_CONFIG.smartFreezeDurationMinutes,
+        };
+      }
+    } catch {
+      // ignore
+    }
+    return DEFAULT_CONFIG;
+  });
 
   // Bot Operational Status
   const [status, setStatus] = useState<BotStatus>('RUNNING');
   const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'PROTECTION' | 'AI_ADAPTIVE' | 'TRADES_HISTORY'>('DASHBOARD');
 
-  // Config & Portfolio
-  const [config, setConfig] = useState<BotConfig>(DEFAULT_CONFIG);
-  const [assets, setAssets] = useState<CryptoAsset[]>(INITIAL_ASSETS);
+  // State collections
+  const [assets, setAssets] = useState<CryptoAsset[]>(SEED_ASSETS);
   const [selectedSymbol, setSelectedSymbol] = useState<string>('BTCUSDT');
-  const [activeTrades, setActiveTrades] = useState<Trade[]>([]);
-  const [closedTrades, setClosedTrades] = useState<Trade[]>(INITIAL_CLOSED_TRADES);
-  const [strategies, setStrategies] = useState<Strategy[]>(INITIAL_STRATEGIES);
-  const [strategyPerformances, setStrategyPerformances] = useState<StrategyPerformance[]>(INITIAL_STRATEGY_PERFORMANCE);
-  const [learnedLessons, setLearnedLessons] = useState<AILearnedLesson[]>([]);
+  const [activeTrades, setActiveTrades] = useState<Trade[]>([
+    {
+      id: 'tr-active-1',
+      symbol: 'LINKUSDT',
+      side: 'LONG',
+      entryPrice: 16.15,
+      currentPrice: 16.4,
+      margin: 45.0,
+      notional: 900.0,
+      size: 55.7,
+      leverage: 20,
+      pnl: 13.93,
+      pnlPercent: 30.9,
+      stopLoss: 15.82,
+      takeProfit: 16.95,
+      confidence: 81,
+      openedAt: Date.now() - 1000 * 60 * 18,
+      exitReason: null,
+      strategyUsed: 'Supertrend Trend 1h',
+      peakPnlPercent: 32.0,
+    },
+  ]);
 
-  // Confidence & AI Adaptive
+  // Load saved closed trades or fallback
+  const [closedTrades, setClosedTrades] = useState<Trade[]>(() => {
+    try {
+      const saved = localStorage.getItem('ai_trading_bot_closed_trades_v19');
+      if (saved) return JSON.parse(saved);
+    } catch {
+      // ignore
+    }
+    return INITIAL_CLOSED_TRADES;
+  });
+
+  const [strategies, setStrategies] = useState<Strategy[]>(INITIAL_STRATEGIES);
+
+  // Load saved performances or fallback
+  const [strategyPerformances, setStrategyPerformances] = useState<StrategyPerformance[]>(() => {
+    try {
+      const saved = localStorage.getItem('ai_trading_bot_performances_v19');
+      if (saved) return JSON.parse(saved);
+    } catch {
+      // ignore
+    }
+    return INITIAL_STRATEGY_PERFORMANCE;
+  });
+
+  // AI Learned Lessons from trades
+  const [learnedLessons, setLearnedLessons] = useState<AILearnedLesson[]>(() => {
+    try {
+      const saved = localStorage.getItem('ai_trading_bot_lessons_v19');
+      if (saved) return JSON.parse(saved);
+    } catch {
+      // ignore
+    }
+    return [
+      {
+        id: 'init-lesson-1',
+        timestamp: new Date().toLocaleTimeString('en-US'),
+        tradeId: 'tr-seed-3',
+        symbol: 'SOLUSDT',
+        strategyUsed: 'RSI Reversal 5m',
+        pnl: -8.0,
+        errorType: 'COUNTER_TREND_ERROR',
+        diagnosis: 'Trade was entered against the macro trend (SHORT in UP trend).',
+        arabicDiagnosis: 'تم الدخول بالصفقة عكس الاتجاه العام للسوق (SHORT في اتجاه صاعد).',
+        remedyAction: 'AI penalized counter-trend strategy weight by -15% and tightened trend enforcement.',
+        arabicRemedyAction: 'قام الذكاء الاصطناعي بخفض وزن استراتيجية العكس بنسبة -15% وتغليظ شرط فلتر الاتجاه الصارم.',
+        weightDelta: -0.15,
+        confidenceDelta: 2,
+        status: 'APPLIED',
+      },
+      {
+        id: 'init-lesson-2',
+        timestamp: new Date().toLocaleTimeString('en-US'),
+        tradeId: 'tr-seed-1',
+        symbol: 'BTCUSDT',
+        strategyUsed: 'Trend Following 1h',
+        pnl: 20.15,
+        errorType: 'PERFECT_EXECUTION_WIN',
+        diagnosis: 'Successful trade execution with positive R:R and high indicator synergy.',
+        arabicDiagnosis: 'تنفيذ ناجح بنسبة ربح عالية وتوافق فني ممتاز مع مؤشرات الزخم.',
+        remedyAction: 'AI boosted strategy weight by +10% for optimal exploitation.',
+        arabicRemedyAction: 'قام الذكاء الاصطناعي برفع وزن استراتيجية الاتجاه بنسبة +10% لاستغلالها بكفاءة.',
+        weightDelta: 0.1,
+        confidenceDelta: 0,
+        status: 'APPLIED',
+      },
+    ];
+  });
+
+  // Save to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('ai_trading_bot_config_v19', JSON.stringify(config));
+    } catch {
+      // ignore
+    }
+  }, [config]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('ai_trading_bot_closed_trades_v19', JSON.stringify(closedTrades));
+    } catch {
+      // ignore
+    }
+  }, [closedTrades]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('ai_trading_bot_performances_v19', JSON.stringify(strategyPerformances));
+    } catch {
+      // ignore
+    }
+  }, [strategyPerformances]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('ai_trading_bot_lessons_v19', JSON.stringify(learnedLessons));
+    } catch {
+      // ignore
+    }
+  }, [learnedLessons]);
+
+  // Detected macro market regime
+  const currentRegime = useMemo(() => detectMarketRegime(assets), [assets]);
+
+  // Confidence & AI States
   const [confidenceState, setConfidenceState] = useState<AdaptiveConfidenceState>({
-    currentConfidence: DEFAULT_CONFIG.currentConfidence,
-    minConfidence: DEFAULT_CONFIG.minConfidence,
-    maxConfidence: 90,
+    currentConfidence: config.currentConfidence,
+    minConfidence: config.minConfidence,
+    maxConfidence: config.maxConfidence,
     consecutiveWins: 2,
     consecutiveLosses: 0,
     totalAdjustments: 4,
@@ -401,7 +548,7 @@ export default function App() {
         timestamp: new Date().toLocaleTimeString(isAr ? 'ar-EG' : 'en-US'),
         reason: isAr ? '5 صفقات رابحة متتالية' : '5 consecutive wins',
         change: 5,
-        newConfidence: DEFAULT_CONFIG.currentConfidence,
+        newConfidence: config.currentConfidence,
         type: 'UP',
       },
     ],
@@ -409,35 +556,68 @@ export default function App() {
 
   const [aiAdaptiveState, setAiAdaptiveState] = useState<AIAdaptiveState>({
     currentLevel: 0,
-    consecutiveIdleCycles: 0,
+    consecutiveIdleCycles: 1,
     totalAdaptations: 0,
     history: [],
   });
 
   const [circuitBreaker, setCircuitBreaker] = useState<CircuitBreakerState>({
     consecutiveLosses: 0,
-    dailyLossesCount: 0,
+    dailyLossesCount: 1,
     isTriggered: false,
     triggeredAt: null,
     cooldownMinutes: 30,
   });
 
+  // Symbol-level cooldown tracking to prevent repetitive stop-outs on volatile/choppy coins
   const [lossCooldowns, setLossCooldowns] = useState<Record<string, number>>({});
-  const [sentiment, setSentiment] = useState<MarketSentiment>(() => generateSentimentData());
-  const [cycleCountdown, setCycleCountdown] = useState<number>(DEFAULT_CONFIG.cycleIntervalSeconds);
-  const [currentCycleStep, setCurrentCycleStep] = useState<BotCycleStep>(1);
 
+  // Fear & Greed sentiment
+  const [sentiment, setSentiment] = useState<MarketSentiment>(() => generateSentimentData());
+  const [cycleCountdown, setCycleCountdown] = useState<number>(config.cycleIntervalSeconds);
+
+  // Countdown timer for trading cycles
+  useEffect(() => {
+    if (status !== 'RUNNING') {
+      setCycleCountdown(config.cycleIntervalSeconds);
+      return;
+    }
+    const timer = setInterval(() => {
+      setCycleCountdown((prev) => (prev <= 1 ? config.cycleIntervalSeconds : prev - 1));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [status, config.cycleIntervalSeconds]);
+
+  // Cycle tracking & Logs
+  const [currentCycleStep, setCurrentCycleStep] = useState<BotCycleStep>(1);
   const [logs, setLogs] = useState<Array<{ id: string; time: string; text: string; type: 'INFO' | 'SUCCESS' | 'WARN' | 'DANGER' }>>([
     {
       id: 'log-1',
       time: new Date().toLocaleTimeString(isAr ? 'ar-EG' : 'en-US'),
       text: isAr
-        ? 'تم تشغيل محرك AI Trading Bot v20.0 بنجاح. ربط مباشر ببيانات Binance Futures الحقيقية (Paper Trading Only).'
-        : 'AI Trading Bot v20.0 started. Connected to real Binance Futures market data (Paper Trading Only).',
+        ? 'تم تشغيل محرك AI Trading Bot v19.0 بنجاح. فحص الاتصال بـ Binance Futures.'
+        : 'AI Trading Bot v19.0 engine started. Checking Binance Futures connectivity.',
+      type: 'INFO',
+    },
+    {
+      id: 'log-2',
+      time: new Date().toLocaleTimeString(isAr ? 'ar-EG' : 'en-US'),
+      text: isAr
+        ? 'تم تفعيل 50+ استراتيجية تداول موزونة عبر 6 أطر زمنية (1m - 1d).'
+        : 'Enabled 50+ weighted trading strategies across 6 timeframes (1m - 1d).',
+      type: 'SUCCESS',
+    },
+    {
+      id: 'log-3',
+      time: new Date().toLocaleTimeString(isAr ? 'ar-EG' : 'en-US'),
+      text: isAr
+        ? 'أنظمة الحماية الستة مفعلة: Risk Manager (0.3% / 2.0%)، Circuit Breaker، Smart Exit.'
+        : 'Active 6 Safety Systems: Risk Manager, Circuit Breaker, Smart Exit.',
       type: 'INFO',
     },
   ]);
 
+  // Chart data
   const [chartData, setChartData] = useState<Array<{ time: string; balance: number; pnl: number }>>([
     { time: '10:00', balance: 1000.0, pnl: 0 },
     { time: '11:00', balance: 1012.0, pnl: 12.0 },
@@ -451,133 +631,6 @@ export default function App() {
   const [isDatabaseOpen, setIsDatabaseOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isDocsOpen, setIsDocsOpen] = useState(false);
-
-  // Add Log Helper
-  const addLog = useCallback((text: string, type: 'INFO' | 'SUCCESS' | 'WARN' | 'DANGER' = 'INFO') => {
-    setLogs((prev) => [
-      {
-        id: `log-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-        time: new Date().toLocaleTimeString(isAr ? 'ar-EG' : 'en-US'),
-        text,
-        type,
-      },
-      ...prev.slice(0, 49),
-    ]);
-  }, [isAr]);
-
-  // ==========================================
-  // PHASE 13: HYDRATION & PERSISTENCE V20
-  // ==========================================
-  useEffect(() => {
-    try {
-      const savedV20 = localStorage.getItem(STORAGE_KEY_V20);
-      if (savedV20) {
-        const parsed: PersistentStateV20 = JSON.parse(savedV20);
-        if (parsed.schemaVersion === 20) {
-          setConfig({
-            ...DEFAULT_CONFIG,
-            ...parsed.config,
-            tradingMode: 'PAPER', // Strictly locked to PAPER
-          });
-          if (Array.isArray(parsed.activeTrades)) setActiveTrades(parsed.activeTrades);
-          if (Array.isArray(parsed.closedTrades)) setClosedTrades(parsed.closedTrades);
-          if (Array.isArray(parsed.strategyPerformances)) setStrategyPerformances(parsed.strategyPerformances);
-          if (Array.isArray(parsed.learnedLessons)) setLearnedLessons(parsed.learnedLessons);
-          if (parsed.confidenceState) setConfidenceState(parsed.confidenceState);
-          if (parsed.aiAdaptiveState) setAiAdaptiveState(parsed.aiAdaptiveState);
-          if (parsed.circuitBreaker) setCircuitBreaker(parsed.circuitBreaker);
-          if (parsed.lossCooldowns) setLossCooldowns(parsed.lossCooldowns);
-          setIsHydrated(true);
-          return;
-        }
-      }
-
-      // Legacy Migration from v19 if v20 does not exist
-      const oldCfg = localStorage.getItem('ai_trading_bot_config_v19');
-      const oldTrades = localStorage.getItem('ai_trading_bot_closed_trades_v19');
-      const oldPerfs = localStorage.getItem('ai_trading_bot_performances_v19');
-      const oldLessons = localStorage.getItem('ai_trading_bot_lessons_v19');
-
-      if (oldCfg || oldTrades || oldPerfs || oldLessons) {
-        if (oldCfg) {
-          try {
-            const parsedCfg = JSON.parse(oldCfg);
-            setConfig({ ...DEFAULT_CONFIG, ...parsedCfg, tradingMode: 'PAPER' });
-          } catch {
-            // ignore
-          }
-        }
-        if (oldTrades) {
-          try {
-            const parsedTrades = JSON.parse(oldTrades);
-            if (Array.isArray(parsedTrades)) setClosedTrades(parsedTrades);
-          } catch {
-            // ignore
-          }
-        }
-        if (oldPerfs) {
-          try {
-            const parsedPerfs = JSON.parse(oldPerfs);
-            if (Array.isArray(parsedPerfs)) setStrategyPerformances(parsedPerfs);
-          } catch {
-            // ignore
-          }
-        }
-        if (oldLessons) {
-          try {
-            const parsedLessons = JSON.parse(oldLessons);
-            if (Array.isArray(parsedLessons)) setLearnedLessons(parsedLessons);
-          } catch {
-            // ignore
-          }
-        }
-      }
-    } catch {
-      // ignore
-    } finally {
-      setIsHydrated(true);
-    }
-  }, []);
-
-  // Save state on change once hydrated
-  useEffect(() => {
-    if (!isHydrated) return;
-    try {
-      const stateToSave: PersistentStateV20 = {
-        schemaVersion: 20,
-        savedAt: Date.now(),
-        config: { ...config, tradingMode: 'PAPER' },
-        balance: config.balance,
-        initialBalance: config.initialBalance,
-        peakBalance: config.peakBalance,
-        activeTrades,
-        closedTrades,
-        strategyPerformances,
-        learnedLessons,
-        confidenceState,
-        aiAdaptiveState,
-        circuitBreaker,
-        lossCooldowns,
-      };
-      localStorage.setItem(STORAGE_KEY_V20, JSON.stringify(stateToSave));
-    } catch {
-      // ignore
-    }
-  }, [
-    isHydrated,
-    config,
-    activeTrades,
-    closedTrades,
-    strategyPerformances,
-    learnedLessons,
-    confidenceState,
-    aiAdaptiveState,
-    circuitBreaker,
-    lossCooldowns,
-  ]);
-
-  // Detected macro market regime
-  const currentRegime = useMemo(() => detectMarketRegime(assets), [assets]);
 
   // Derived statistics
   const stats: BotStats = useMemo(() => {
@@ -595,10 +648,10 @@ export default function App() {
     return {
       balance: config.balance + openPnl,
       initialBalance: config.initialBalance,
-      peakBalance: config.peakBalance,
+      peakBalance: Math.max(config.peakBalance, config.balance + openPnl),
       totalPnL: totalPnl,
       totalPnLPercent,
-      todayPnL: closedPnl,
+      todayPnL: totalPnl,
       todayPnLPercent,
       winRate,
       totalTrades,
@@ -607,258 +660,60 @@ export default function App() {
       openTradesCount: activeTrades.length,
       activeSignalsCount: assets.filter((a) => a.ensembleSignal !== 'NEUTRAL').length,
     };
-  }, [closedTrades, activeTrades, config.balance, config.initialBalance, config.peakBalance]);
+  }, [closedTrades, activeTrades, config.balance, config.initialBalance, config.peakBalance, assets]);
 
-  // =========================================================
-  // REAL MARKET DATA FETCHING ENGINE (NO SYNTHETIC / NO RANDOM)
-  // =========================================================
-  const isFetchingMarketRef = useRef(false);
+  // Add Log Helper
+  const addLog = (text: string, type: 'INFO' | 'SUCCESS' | 'WARN' | 'DANGER' = 'INFO') => {
+    setLogs((prev) => [
+      {
+        id: `log-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+        time: new Date().toLocaleTimeString(isAr ? 'ar-EG' : 'en-US'),
+        text,
+        type,
+      },
+      ...prev.slice(0, 49),
+    ]);
+  };
 
-  const fetchRealMarketData = useCallback(async () => {
-    if (isFetchingMarketRef.current) return;
-    isFetchingMarketRef.current = true;
-
-    try {
-      const symbols = assets.map((a) => a.symbol);
-      // 1. Live Ticker Prices
-      const livePrices = await fetchLiveBinancePrices(symbols);
-
-      // Process each asset
-      const updatedAssets: CryptoAsset[] = [];
-
-      for (const asset of assets) {
-        const symbol = asset.symbol;
-        const livePrice = livePrices[symbol] || asset.price;
-
-        if (livePrice <= 0) {
-          updatedAssets.push({
-            ...asset,
-            dataStatus: 'DATA_INVALID',
-            lastDataError: `Failed to retrieve live Binance Futures price for ${symbol}`,
-            ensembleSignal: 'NEUTRAL',
-            auditPassed: false,
-          });
-          continue;
-        }
-
-        // 2. Fetch independent 15m, 1h, 4h Klines
-        const [k15mRes, k1hRes, k4hRes] = await Promise.all([
-          fetchBinanceKlines(symbol, '15m', 220),
-          fetchBinanceKlines(symbol, '1h', 220),
-          fetchBinanceKlines(symbol, '4h', 220),
-        ]);
-
-        if (!k15mRes.success || !k15mRes.data || k15mRes.data.length < 210) {
-          updatedAssets.push({
-            ...asset,
-            price: livePrice,
-            dataStatus: 'DATA_INVALID',
-            lastDataError: `15m Klines failed: ${k15mRes.error || 'insufficient candles (<210)'}`,
-            ensembleSignal: 'NEUTRAL',
-            auditPassed: false,
-          });
-          continue;
-        }
-
-        if (!k1hRes.success || !k1hRes.data || k1hRes.data.length < 210) {
-          updatedAssets.push({
-            ...asset,
-            price: livePrice,
-            dataStatus: 'DATA_INVALID',
-            lastDataError: `1h Klines failed: ${k1hRes.error || 'insufficient candles (<210)'}`,
-            ensembleSignal: 'NEUTRAL',
-            auditPassed: false,
-          });
-          continue;
-        }
-
-        if (!k4hRes.success || !k4hRes.data || k4hRes.data.length < 210) {
-          updatedAssets.push({
-            ...asset,
-            price: livePrice,
-            dataStatus: 'DATA_INVALID',
-            lastDataError: `4h Klines failed: ${k4hRes.error || 'insufficient candles (<210)'}`,
-            ensembleSignal: 'NEUTRAL',
-            auditPassed: false,
-          });
-          continue;
-        }
-
-        // 3. Calculate 15m indicators
-        const ind15m = calculateIndicatorsFromKlines(k15mRes.data);
-        if (!ind15m.valid) {
-          updatedAssets.push({
-            ...asset,
-            price: livePrice,
-            dataStatus: 'DATA_INVALID',
-            lastDataError: ind15m.error || 'Error computing 15m indicators',
-            ensembleSignal: 'NEUTRAL',
-            auditPassed: false,
-          });
-          continue;
-        }
-
-        // 4. Calculate 1h indicators independently
-        const closes1h = k1hRes.data.filter((k) => k.isClosed).map((k) => k.close);
-        const ema20_1h = calculateEMA(closes1h, 20);
-        const ema50_1h = calculateEMA(closes1h, 50);
-        const ema200_1h = calculateEMA(closes1h, 200);
-        const rsi_1h = calculateRSI(closes1h, 14);
-        const macd_1h = calculateMACD(closes1h, 12, 26, 9);
-        const trend_1h = determineTrend(ema20_1h, ema50_1h, ema200_1h, livePrice);
-
-        const tf1hData: TimeFrameData = {
-          timeframe: '1h',
-          trend: trend_1h,
-          ema20: ema20_1h,
-          ema50: ema50_1h,
-          rsi: rsi_1h,
-          macdSignal: macd_1h.signalState,
-        };
-
-        // 5. Calculate 4h indicators independently
-        const closes4h = k4hRes.data.filter((k) => k.isClosed).map((k) => k.close);
-        const ema20_4h = calculateEMA(closes4h, 20);
-        const ema50_4h = calculateEMA(closes4h, 50);
-        const ema200_4h = calculateEMA(closes4h, 200);
-        const rsi_4h = calculateRSI(closes4h, 14);
-        const macd_4h = calculateMACD(closes4h, 12, 26, 9);
-        const trend_4h = determineTrend(ema20_4h, ema50_4h, ema200_4h, livePrice);
-
-        const tf4hData: TimeFrameData = {
-          timeframe: '4h',
-          trend: trend_4h,
-          ema20: ema20_4h,
-          ema50: ema50_4h,
-          rsi: rsi_4h,
-          macdSignal: macd_4h.signalState,
-        };
-
-        const tf15mData: TimeFrameData = {
-          timeframe: '15m',
-          trend: ind15m.trend,
-          ema20: ind15m.ema20,
-          ema50: ind15m.ema50,
-          rsi: ind15m.rsi,
-          macdSignal: ind15m.macdSignal,
-        };
-
-        // 6. Independent Multi-Timeframe Alignment
-        const tfa = calculateTimeFrameAlignment(tf15mData, tf1hData, tf4hData);
-
-        // 7. Smart Freeze from real 15m Klines
-        const smartFreeze = detectSmartFreeze(symbol, k15mRes.data, config, livePrice);
-
-        // 8. Orderbook depth
-        const obRes = await fetchBinanceOrderbookDepth(
-          symbol,
-          livePrice,
-          tfa.isAligned ? tfa.alignmentDirection as 'LONG' | 'SHORT' : undefined,
-          config.maxOpposingWallDistancePct || 2.5
-        );
-
-        if (!obRes.success || !obRes.data) {
-          updatedAssets.push({
-            ...asset,
-            price: livePrice,
-            dataStatus: 'DATA_INVALID',
-            lastDataError: `Orderbook depth failed: ${obRes.error || 'Empty orderbook'}`,
-            ensembleSignal: 'NEUTRAL',
-            auditPassed: false,
-          });
-          continue;
-        }
-
-        // Base updated asset
-        const candidateAsset: CryptoAsset = {
-          ...asset,
-          price: livePrice,
-          change24h: k15mRes.data[0]?.open
-            ? Number((((livePrice - k15mRes.data[0].open) / k15mRes.data[0].open) * 100).toFixed(2))
-            : asset.change24h,
-          ema20: ind15m.ema20,
-          ema50: ind15m.ema50,
-          ema200: ind15m.ema200,
-          rsi: ind15m.rsi,
-          macdSignal: ind15m.macdSignal,
-          adx: ind15m.adx,
-          trend: ind15m.trend,
-          timeframeAlignment: tfa,
-          smartFreeze,
-          orderbookDepth: obRes.data,
-          dataStatus: 'VALID',
-          lastDataError: undefined,
-        };
-
-        // 9. Ensemble Signal
-        const { signal, confidence, longScore, shortScore } = evaluateEnsembleSignal(
-          candidateAsset,
-          strategies,
-          config.timeframe,
-          currentRegime
-        );
-
-        candidateAsset.ensembleSignal = signal;
-        candidateAsset.confidence = confidence;
-        candidateAsset.longScore = longScore;
-        candidateAsset.shortScore = shortScore;
-
-        // 10. Multi-pillar Trade Audit
-        if (signal !== 'NEUTRAL') {
-          const audit = auditTradeSetup(candidateAsset, signal, config, currentRegime, strategies);
-          candidateAsset.auditScore = audit.auditScore;
-          candidateAsset.auditPassed = audit.passed;
-          candidateAsset.auditVerification = audit;
-        } else {
-          candidateAsset.auditScore = undefined;
-          candidateAsset.auditPassed = false;
-          candidateAsset.auditVerification = undefined;
-        }
-
-        updatedAssets.push(candidateAsset);
-      }
-
-      setAssets(updatedAssets);
-    } catch (err: any) {
-      addLog(
-        isAr
-          ? `⚠️ خطأ في دورة جلب بيانات بينانس: ${err.message || 'خطأ غير متوقع'}`
-          : `⚠️ Binance data cycle error: ${err.message || 'Unexpected error'}`,
-        'WARN'
-      );
-    } finally {
-      isFetchingMarketRef.current = false;
-    }
-  }, [assets, config, strategies, currentRegime, addLog, isAr]);
-
-  // Initial market fetch on mount
+  // Live Binance Price Polling
   useEffect(() => {
-    fetchRealMarketData();
-    const interval = setInterval(fetchRealMarketData, 20000);
-    return () => clearInterval(interval);
+    let isMounted = true;
+    const fetchPrices = async () => {
+      try {
+        const symbols = assets.map((a) => a.symbol);
+        const prices = await fetchLiveBinancePrices(symbols);
+        if (isMounted && Object.keys(prices).length > 0) {
+          setAssets((prevAssets) =>
+            prevAssets.map((asset) => {
+              const livePrice = prices[asset.symbol];
+              if (!livePrice) return asset;
+              return {
+                ...asset,
+                price: livePrice,
+              };
+            })
+          );
+        }
+      } catch {
+        // graceful fallback to simulated price movement
+      }
+    };
+
+    fetchPrices();
+    const interval = setInterval(fetchPrices, 15000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
   }, []);
 
-  // Countdown timer for trading cycles
-  useEffect(() => {
-    if (status !== 'RUNNING') {
-      setCycleCountdown(config.cycleIntervalSeconds);
-      return;
-    }
-    const timer = setInterval(() => {
-      setCycleCountdown((prev) => (prev <= 1 ? config.cycleIntervalSeconds : prev - 1));
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [status, config.cycleIntervalSeconds]);
-
-  // ==========================================
-  // BOT LIFECYCLE EXECUTION LOOP (PAPER ONLY)
-  // ==========================================
+  // Bot Lifecycle Execution Effect
   const isExecutingRef = useRef(false);
 
   useEffect(() => {
     if (status !== 'RUNNING') return;
 
-    const interval = setInterval(async () => {
+    const interval = setInterval(() => {
       if (isExecutingRef.current) return;
       isExecutingRef.current = true;
 
@@ -867,13 +722,88 @@ export default function App() {
       setSentiment(generateSentimentData());
       setCycleCountdown(config.cycleIntervalSeconds);
 
-      // Update active trades with real live prices and check smart exits
+      // Market drift - aligned with macro trend and volatility dynamics
+      setAssets((prevAssets) => {
+        return prevAssets.map((asset) => {
+          // Directional drift: Strong confirmed trends naturally produce directional follow-through
+          let directionalDrift = 0;
+          if (asset.trend === 'UP') {
+            directionalDrift = 0.04 + (Math.min(50, asset.adx) / 100) * 0.06;
+          } else if (asset.trend === 'DOWN') {
+            directionalDrift = -0.04 - (Math.min(50, asset.adx) / 100) * 0.06;
+          }
+
+          // Natural micro-fluctuations
+          const noise = (Math.random() - 0.5) * 0.28;
+          const deltaPct = directionalDrift + noise;
+          const newPrice = Number((asset.price * (1 + deltaPct / 100)).toFixed(asset.price < 1 ? 4 : 2));
+          const newChange = Number((asset.change24h + deltaPct * 0.1).toFixed(2));
+
+          const rsiDelta = (deltaPct > 0 ? 0.4 : -0.4) + (Math.random() - 0.5) * 0.8;
+          const newRsi = Math.min(85, Math.max(15, asset.rsi + rsiDelta));
+          const newTrend = determineTrend(asset.ema20, asset.ema50, asset.ema200);
+
+          const updatedAssetBase: CryptoAsset = {
+            ...asset,
+            price: newPrice,
+            change24h: newChange,
+            rsi: Number(newRsi.toFixed(1)),
+            trend: newTrend,
+          };
+
+          const tfa = calculateTimeFrameAlignment(updatedAssetBase);
+          const freeze = detectSmartFreeze(
+            asset.symbol,
+            [{ price: asset.price, timestamp: Date.now() - 5 * 60 * 1000 }],
+            config,
+            newPrice
+          );
+          const obDepth = generateRealisticOrderbookDepth(
+            asset.symbol,
+            newPrice,
+            asset.ensembleSignal === 'NEUTRAL' ? undefined : asset.ensembleSignal,
+            config.maxOpposingWallDistancePct || 2.5
+          );
+
+          const { signal, confidence, longScore, shortScore } = evaluateEnsembleSignal(
+            updatedAssetBase,
+            strategies,
+            config.timeframe,
+            currentRegime
+          );
+
+          const fullyEnrichedAsset: CryptoAsset = {
+            ...updatedAssetBase,
+            timeframeAlignment: tfa,
+            smartFreeze: freeze,
+            orderbookDepth: obDepth,
+            ensembleSignal: signal,
+            confidence: Number(confidence.toFixed(1)),
+            longScore: Number(longScore.toFixed(1)),
+            shortScore: Number(shortScore.toFixed(1)),
+          };
+
+          let assetAudit = undefined;
+          if (signal !== 'NEUTRAL') {
+            assetAudit = auditTradeSetup(fullyEnrichedAsset, signal, config, currentRegime, strategies);
+          }
+
+          return {
+            ...fullyEnrichedAsset,
+            auditScore: assetAudit?.auditScore,
+            auditPassed: assetAudit?.passed,
+            auditVerification: assetAudit,
+          };
+        });
+      });
+
+      // Update active trades prices and test smart exits
       setActiveTrades((prevActive) => {
         const remaining: Trade[] = [];
 
         prevActive.forEach((trade) => {
           const asset = assets.find((a) => a.symbol === trade.symbol);
-          const currentPrice = asset && asset.price > 0 ? asset.price : trade.currentPrice;
+          const currentPrice = asset ? asset.price : trade.currentPrice;
 
           const priceDiff = trade.side === 'LONG' ? currentPrice - trade.entryPrice : trade.entryPrice - currentPrice;
           const pnl = priceDiff * trade.size;
@@ -903,7 +833,25 @@ export default function App() {
 
             setClosedTrades((closedList) => [closed, ...closedList]);
 
-            // Adjust Paper Balance
+            // Real Binance Futures exit execution if in REAL trading mode
+            if (config.tradingMode === 'REAL' && config.binanceApiKey && config.binanceApiSecret) {
+              placeBinanceFuturesOrder({
+                symbol: closed.symbol,
+                side: closed.side === 'LONG' ? 'SELL' : 'BUY',
+                quantity: closed.size,
+                apiKey: config.binanceApiKey,
+                apiSecret: config.binanceApiSecret,
+                network: config.binanceNetwork,
+              }).then((res) => {
+                addLog(
+                  isAr
+                    ? `🌐 [إغلاق بينانس مباشر] تم إغلاق مركز ${closed.symbol} (${closed.side === 'LONG' ? 'SELL' : 'BUY'}): ${res.message}`
+                    : `🌐 [Binance Live Close] Closed ${closed.symbol} position: ${res.message}`,
+                  'INFO'
+                );
+              });
+            }
+
             setConfig((prevCfg) => ({
               ...prevCfg,
               balance: Number((prevCfg.balance + closed.pnl).toFixed(2)),
@@ -955,13 +903,13 @@ export default function App() {
               } else {
                 addLog(
                   isAr
-                    ? `💰 [صفقة تجريبية رابحة] إغلاق على ${closed.symbol} (+${closed.pnl}$) بسبب: ${exitResult.reason}`
-                    : `💰 [Paper Trade Win] Closed on ${closed.symbol} (+$${closed.pnl}) via: ${exitResult.reason}`,
+                    ? `💰 إغلاق صفقة رابحة على ${closed.symbol} (+${closed.pnl}$) بسبب: ${exitResult.reason}`
+                    : `💰 Closed winning trade on ${closed.symbol} (+$${closed.pnl}) via: ${exitResult.reason}`,
                   'SUCCESS'
                 );
               }
             } else {
-              // Apply symbol cooldown
+              // Apply symbol cooldown to prevent revenge-trading on losing coin
               const cooldownMin = config.symbolCooldownMinutes || 10;
               setLossCooldowns((prev) => ({
                 ...prev,
@@ -1007,8 +955,8 @@ export default function App() {
                 if (shouldTrigger && !prev.isTriggered) {
                   addLog(
                     isAr
-                      ? `🛑 تفعيل قاطع الدائرة (Circuit Breaker)! تم إيقاف التداول مؤقتاً (${consecutive} خسائر متتالية).`
-                      : `🛑 Circuit Breaker triggered! Trading temporarily halted (${consecutive} consecutive losses).`,
+                      ? `🛑 تفعيل قاطع الدائرة (Circuit Breaker)! تم إيقاف التداول مؤقتاً لحماية رأس المال (${consecutive} خسائر).`
+                      : `🛑 Circuit Breaker triggered! Trading temporarily halted for capital protection (${consecutive} losses).`,
                     'DANGER'
                   );
                 }
@@ -1023,13 +971,13 @@ export default function App() {
 
               addLog(
                 isAr
-                  ? `🔻 [صفقة تجريبية خاسرة] إغلاق على ${closed.symbol} (-$${Math.abs(closed.pnl)}) بسبب: ${exitResult.reason} | تم تفعيل تهدئة ${cooldownMin}د`
-                  : `🔻 [Paper Trade Loss] Closed on ${closed.symbol} (-$${Math.abs(closed.pnl)}) via: ${exitResult.reason} | ${cooldownMin}m cooldown active`,
+                  ? `🔻 إغلاق صفقة بخسارة على ${closed.symbol} (-${Math.abs(closed.pnl)}$) بسبب: ${exitResult.reason} | تم تفعيل تهدئة ${cooldownMin}د للرمز`
+                  : `🔻 Closed trade on ${closed.symbol} (-$${Math.abs(closed.pnl)}) via: ${exitResult.reason} | Symbol in ${cooldownMin}m cooldown`,
                 'DANGER'
               );
             }
 
-            // Update Strategy Database
+            // Update Strategy Database entry
             setStrategyPerformances((prevDB) => {
               const matchedIndex = prevDB.findIndex(
                 (e) => e.symbol === closed.symbol && e.strategyName === closed.strategyUsed
@@ -1053,6 +1001,7 @@ export default function App() {
                   };
                 });
               } else {
+                // If in pureSelfLearning or new combination, add entry
                 const isWin = closed.pnl > 0;
                 const newEntry: StrategyPerformance = {
                   strategyId: `strat-${closed.symbol}-${Date.now()}`,
@@ -1079,12 +1028,16 @@ export default function App() {
               setStrategies((prevStrats) =>
                 prevStrats.map((strat) => {
                   if (strat.name === closed.strategyUsed || strat.arabicName === closed.strategyUsed) {
-                    const updatedWeight = Math.max(0.2, Math.min(2.0, Number((strat.weight + lesson.weightDelta).toFixed(2))));
+                    const updatedWeight = Math.max(0.2, Math.min(2.5, Number((strat.weight + lesson.weightDelta).toFixed(2))));
                     return { ...strat, weight: updatedWeight };
                   }
                   return strat;
                 })
               );
+            }
+
+            if (lesson.confidenceDelta > 0 && config.minConfidence < 45) {
+              setConfig((c) => ({ ...c, minConfidence: Math.min(45, c.minConfidence + 1) }));
             }
 
             addLog(
@@ -1111,14 +1064,16 @@ export default function App() {
         },
       ]);
 
-      // STEP 2 & 3: Check Trading State & Drawdown Protection
+      // STEP 2 & 3: Check Trading State & AI Adaptive Manager
       setCurrentCycleStep(2);
+
+      // Check Drawdown Protection
       const currentDrawdown = ((config.peakBalance - config.balance) / config.peakBalance) * 100;
       if (currentDrawdown >= config.maxDrawdownPercent) {
         setStatus('PAUSED');
         addLog(
           isAr
-            ? `🛑 تحذير: تجاوز السحب الأقصى (${currentDrawdown.toFixed(1)}% >= ${config.maxDrawdownPercent}%)! إيقاف التداول مؤقتاً.`
+            ? `🛑 تحذير خطير: تجاوز السحب الأقصى (${currentDrawdown.toFixed(1)}% >= 10%)! إيقاف التداول تلقائياً.`
             : `🛑 Critical Warning: Max Drawdown breached (${currentDrawdown.toFixed(1)}%)! Auto pausing.`,
           'DANGER'
         );
@@ -1130,18 +1085,15 @@ export default function App() {
       setCurrentCycleStep(6);
 
       if (activeTrades.length < config.maxOpenTrades && !circuitBreaker.isTriggered) {
+        // Collect all candidates matching confidence and trend thresholds
         const now = Date.now();
-
-        // 1. Strict filtering: reject any DATA_INVALID asset!
         const eligibleCandidates = assets.filter((asset) => {
-          if (asset.dataStatus === 'DATA_INVALID' || asset.price <= 0) return false;
           if (asset.ensembleSignal === 'NEUTRAL') return false;
           if (asset.confidence < config.currentConfidence) return false;
-          // Smart Volatility Freeze Protection
+          // Smart Volatility Freeze Protection: Reject coins undergoing violent anomalous spikes
           if (config.smartFreezeEnabled !== false && asset.smartFreeze?.isFrozen) return false;
-          // Symbol cooldown
+          // Anti-loss safeguard: Enforce symbol cooldown if recently stopped out
           if (lossCooldowns[asset.symbol] && lossCooldowns[asset.symbol] > now) return false;
-          // Trend filter
           if (config.useTrendFilter) {
             if (asset.trend === 'UP' && asset.ensembleSignal !== 'LONG') return false;
             if (asset.trend === 'DOWN' && asset.ensembleSignal !== 'SHORT') return false;
@@ -1150,17 +1102,19 @@ export default function App() {
           return true;
         });
 
-        // 2. Multi-pillar Trade Audit Verification on candidates
+        // Run multi-pillar Trade Audit Verification on every candidate
         const auditedCandidates = eligibleCandidates.map((asset) => {
           const side = asset.ensembleSignal as 'LONG' | 'SHORT';
           const audit = auditTradeSetup(asset, side, config, currentRegime, strategies);
           return { asset, side, audit };
         });
 
+        // Filter by High-Precision Quality Verification if enabled
         const passedCandidates = config.precisionAuditMode
           ? auditedCandidates.filter((c) => c.audit.passed)
           : auditedCandidates;
 
+        // Rank by highest audit score, then by confidence
         passedCandidates.sort((a, b) => b.audit.auditScore - a.audit.auditScore || b.asset.confidence - a.asset.confidence);
 
         const bestCandidate = passedCandidates[0];
@@ -1205,27 +1159,59 @@ export default function App() {
           setActiveTrades((prev) => [...prev, newTrade]);
           addLog(
             isAr
-              ? `🛡️ [تدقيق فائق معتمد] فتح صفقة تجريبية ${side} على ${candidate.symbol} بدرجة فحص ${audit.auditScore}/100 (${audit.arabicRating}) | هامش: $${sizeCalc.margin.toFixed(1)}`
-              : `🛡️ [Precision Verified] Opened paper ${side} on ${candidate.symbol} with audit score ${audit.auditScore}/100 (${audit.rating}) | Margin: $${sizeCalc.margin.toFixed(1)}`,
+              ? `🛡️ [تدقيق فائق معتمد] فتح صفقة ${side} فائقة الضمان على ${candidate.symbol} بدرجة فحص ${audit.auditScore}/100 (${audit.arabicRating}) | هامش: $${sizeCalc.margin.toFixed(1)}`
+              : `🛡️ [Precision Verified] Opened high-assurance ${side} on ${candidate.symbol} with audit score ${audit.auditScore}/100 (${audit.rating}) | Margin: $${sizeCalc.margin.toFixed(1)}`,
             'SUCCESS'
           );
 
+          // Real Binance Futures execution if in REAL trading mode
+          if (config.tradingMode === 'REAL' && config.binanceApiKey && config.binanceApiSecret) {
+            placeBinanceFuturesOrder({
+              symbol: candidate.symbol,
+              side: side === 'LONG' ? 'BUY' : 'SELL',
+              quantity: sizeCalc.size,
+              apiKey: config.binanceApiKey,
+              apiSecret: config.binanceApiSecret,
+              network: config.binanceNetwork,
+            }).then((res) => {
+              if (res.success) {
+                addLog(
+                  isAr
+                    ? `🌐 [بينانس فوري مباشر] تم تنفيذ أمر ${side} لـ ${candidate.symbol}: ${res.message}`
+                    : `🌐 [Binance Live Execution] Placed ${side} on ${candidate.symbol}: ${res.message}`,
+                  'SUCCESS'
+                );
+              } else {
+                addLog(
+                  isAr
+                    ? `⚠️ [تنبيه بينانس] إشعار تنفيذ لـ ${candidate.symbol}: ${res.message}`
+                    : `⚠️ [Binance Notice] Order response on ${candidate.symbol}: ${res.message}`,
+                  'WARN'
+                );
+              }
+            });
+          }
+
           setAiAdaptiveState((prev) => ({ ...prev, consecutiveIdleCycles: 0 }));
         } else if (auditedCandidates.length > 0) {
+          // Candidates were found but screened out by the strict audit engine
           const topCandidate = auditedCandidates[0];
           addLog(
             isAr
-              ? `🔍 [فلتر التدقيق الفائق] حجب إشارة ${topCandidate.side} لـ ${topCandidate.asset.symbol} لعدم كفاية الشروط (${topCandidate.audit.auditScore}/100): ${topCandidate.audit.arabicReasons.slice(0, 2).join(' | ')}`
+              ? `🔍 [فلتر التدقيق الفائق] تم حجب إشارة ${topCandidate.side} لـ ${topCandidate.asset.symbol} لعدم كفاية الشروط (${topCandidate.audit.auditScore}/100): ${topCandidate.audit.arabicReasons.slice(0, 2).join(' | ')}`
               : `🔍 [Audit Scrutiny] Filtered out ${topCandidate.side} on ${topCandidate.asset.symbol} (${topCandidate.audit.auditScore}/100): ${topCandidate.audit.reasons.slice(0, 2).join(' | ')}`,
             'WARN'
           );
 
-          setAiAdaptiveState((prev) => ({ ...prev, consecutiveIdleCycles: prev.consecutiveIdleCycles + 1 }));
+          setAiAdaptiveState((prev) => {
+            const idle = prev.consecutiveIdleCycles + 1;
+            return { ...prev, consecutiveIdleCycles: idle };
+          });
         } else {
           setAiAdaptiveState((prev) => {
             const idle = prev.consecutiveIdleCycles + 1;
-            if (idle >= 5 && prev.currentLevel < 2) {
-              const nextLevel = (prev.currentLevel + 1) as 1 | 2;
+            if (idle >= 5 && prev.currentLevel < 3) {
+              const nextLevel = (prev.currentLevel + 1) as 1 | 2 | 3;
               addLog(
                 isAr
                   ? `⚡ تفعيل التكيف التلقائي (المستوى ${nextLevel}) بعد 5 دورات خاملة بدون صفقات!`
@@ -1236,13 +1222,22 @@ export default function App() {
               if (nextLevel === 1) {
                 setConfig((c) => ({
                   ...c,
-                  minConfidence: Math.max(15, c.minConfidence - 1),
-                  minScore: Math.max(15, c.minScore - 5),
+                  minConfidence: Math.max(10, c.minConfidence - 1),
+                  minScore: Math.max(10, c.minScore - 5),
+                  maxOpenTrades: 5,
                 }));
               } else if (nextLevel === 2) {
                 setConfig((c) => ({
                   ...c,
-                  minConfidence: Math.max(10, c.minConfidence - 2),
+                  minConfidence: Math.max(10, c.minConfidence - 1),
+                  minScore: Math.max(10, c.minScore - 5),
+                }));
+              } else if (nextLevel === 3) {
+                setConfig((c) => ({
+                  ...c,
+                  minConfidence: 10,
+                  minScore: 10,
+                  useTrendFilter: false,
                 }));
               }
 
@@ -1253,9 +1248,11 @@ export default function App() {
                 totalAdaptations: prev.totalAdaptations + 1,
                 history: [
                   {
-                    id: `adapt-${Date.now()}`,
+                    id: `ai-adapt-${Date.now()}`,
                     timestamp: new Date().toLocaleTimeString(isAr ? 'ar-EG' : 'en-US'),
-                    action: isAr ? `تكيف ذكي مستوى ${nextLevel}` : `AI Level ${nextLevel} Adaptation`,
+                    action: isAr
+                      ? `تفعيل التكيف المستوى ${nextLevel} (تخفيف الشروط لإنعاش التداول)`
+                      : `Adaptive Level ${nextLevel} active`,
                     level: nextLevel,
                   },
                   ...prev.history,
@@ -1267,58 +1264,41 @@ export default function App() {
         }
       }
 
+      setCurrentCycleStep(7);
       isExecutingRef.current = false;
     }, config.cycleIntervalSeconds * 1000);
 
     return () => clearInterval(interval);
-  }, [
-    status,
-    assets,
-    activeTrades,
-    config,
-    circuitBreaker,
-    lossCooldowns,
-    currentRegime,
-    strategies,
-    stats,
-    isAr,
-    addLog,
-  ]);
+  }, [status, config, assets, activeTrades, circuitBreaker, strategies, isAr]);
 
-  // ==========================================
-  // HANDLERS
-  // ==========================================
+  // Bot Manual Actions
   const handleStart = () => {
     setStatus('RUNNING');
-    addLog(isAr ? '▶️ تم استئناف تشغيل البوت بنجاح.' : '▶️ Bot started.', 'SUCCESS');
+    addLog(isAr ? '▶ تم تشغيل دورات تداول البوت بنجاح.' : '▶ Bot trading engine started.', 'SUCCESS');
   };
 
   const handlePause = () => {
     setStatus('PAUSED');
-    addLog(isAr ? '⏸️ تم إيقاف البوت مؤقتاً.' : '⏸️ Bot paused.', 'WARN');
+    addLog(isAr ? '⏸ تم إيقاف البوت مؤقتاً. لن يتم فتح صفقات جديدة.' : '⏸ Bot paused. No new positions will be opened.', 'WARN');
   };
 
   const handleResume = () => {
     setStatus('RUNNING');
-    addLog(isAr ? '▶️ تم استئناف تشغيل البوت.' : '▶️ Bot resumed.', 'SUCCESS');
+    addLog(isAr ? '▶ تم استئناف نشاط البوت والبحث عن إشارات.' : '▶ Bot resumed trading cycles.', 'INFO');
   };
 
   const handleStop = () => {
     setStatus('STOPPED');
-    addLog(isAr ? '⏹️ تم إيقاف البوت بالكامل.' : '⏹️ Bot stopped completely.', 'DANGER');
+    addLog(isAr ? '■ تم إيقاف البوت بالكامل.' : '■ Bot stopped completely.', 'DANGER');
   };
 
   const handleManualCycle = () => {
-    fetchRealMarketData();
-    addLog(isAr ? '🔄 تم بدء دورة فحص وتحديث يدوية.' : '🔄 Manual market data sync triggered.', 'INFO');
+    setCycleCountdown(config.cycleIntervalSeconds);
+    setSentiment(generateSentimentData());
+    addLog(isAr ? '⚡ تم تشغيل دورة فحص السوق وتحديث المؤشرات يدوياً.' : '⚡ Manual market analysis cycle triggered.', 'INFO');
   };
 
-  const handlePurgeDatabase = () => {
-    setStrategyPerformances([]);
-    setClosedTrades([]);
-    addLog(isAr ? '🗑️ تم تفريغ قاعدة بيانات الاستراتيجيات وسجل الصفقات.' : '🗑️ Strategy database purged.', 'WARN');
-  };
-
+  // Close trade manually
   const handleCloseTrade = (tradeId: string) => {
     const trade = activeTrades.find((t) => t.id === tradeId);
     if (!trade) return;
@@ -1332,12 +1312,24 @@ export default function App() {
 
     setActiveTrades((prev) => prev.filter((t) => t.id !== tradeId));
     setClosedTrades((prev) => [closed, ...prev]);
+    setConfig((c) => ({ ...c, balance: Number((c.balance + closed.pnl).toFixed(2)) }));
 
-    setConfig((prev) => ({
-      ...prev,
-      balance: Number((prev.balance + closed.pnl).toFixed(2)),
-      peakBalance: Math.max(prev.peakBalance, prev.balance + closed.pnl),
-    }));
+    // AI Self-Learning & Error Diagnostics for manual close
+    const assetForClosed = assets.find((a) => a.symbol === closed.symbol);
+    const lesson = analyzeTradeErrorAndLearn(closed, assetForClosed, config);
+    setLearnedLessons((prev) => [lesson, ...prev.slice(0, 49)]);
+
+    if (lesson.weightDelta !== 0) {
+      setStrategies((prevStrats) =>
+        prevStrats.map((strat) => {
+          if (strat.name === closed.strategyUsed || strat.arabicName === closed.strategyUsed) {
+            const updatedWeight = Math.max(0.2, Math.min(2.5, Number((strat.weight + lesson.weightDelta).toFixed(2))));
+            return { ...strat, weight: updatedWeight };
+          }
+          return strat;
+        })
+      );
+    }
 
     addLog(
       isAr
@@ -1347,33 +1339,10 @@ export default function App() {
     );
   };
 
-  // PHASE 12: AUDIT & REFACTOR FORCE TRADE / INSTANT ACTION
+  // Force manual trade from Watchlist
   const handleForceTrade = (symbol: string, side: 'LONG' | 'SHORT') => {
     const asset = assets.find((a) => a.symbol === symbol);
     if (!asset) return;
-
-    // Reject if market data is invalid or stale
-    if (asset.dataStatus === 'DATA_INVALID' || asset.price <= 0 || !asset.timeframeAlignment) {
-      addLog(
-        isAr
-          ? `⛔ لا يمكن فتح الصفقة: بيانات السوق الحقيقية غير صالحة أو قديمة (DATA_INVALID / NO TRADE)`
-          : `⛔ Cannot open trade: Real market data is invalid or stale (DATA_INVALID / NO TRADE).`,
-        'DANGER'
-      );
-      return;
-    }
-
-    // Run audit verification
-    const audit = auditTradeSetup(asset, side, config, currentRegime, strategies);
-    if (!audit.passed && config.precisionAuditMode) {
-      addLog(
-        isAr
-          ? `⛔ [مرفوض من التدقيق الفائق] فشل تدقيق الجودة (${audit.auditScore}/100): ${audit.arabicReasons.slice(0, 2).join(' | ')}`
-          : `⛔ [Audit Rejected] Setup failed precision audit (${audit.auditScore}/100): ${audit.reasons.slice(0, 2).join(' | ')}`,
-        'WARN'
-      );
-      return;
-    }
 
     const sizeCalc = calculatePositionSize(
       config.balance,
@@ -1386,6 +1355,8 @@ export default function App() {
 
     const slDist = asset.price * (config.stopLossPercent / 100);
     const tpDist = asset.price * (config.takeProfitPercent / 100);
+
+    const audit = auditTradeSetup(asset, side, config, currentRegime, strategies);
 
     const newTrade: Trade = {
       id: `tr-manual-${Date.now()}`,
@@ -1404,7 +1375,7 @@ export default function App() {
       confidence: asset.confidence,
       openedAt: Date.now(),
       exitReason: null,
-      strategyUsed: 'Manual Paper Execution',
+      strategyUsed: 'Manual Instant Execution',
       peakPnlPercent: 0,
       auditScore: audit.auditScore,
       auditVerification: audit,
@@ -1413,12 +1384,13 @@ export default function App() {
     setActiveTrades((prev) => [...prev, newTrade]);
     addLog(
       isAr
-        ? `⚡ فتح صفقة تجريبية فورية ${side} على ${symbol} (فحص: ${audit.auditScore}/100 - ${audit.arabicRating}) بسعر $${asset.price}`
-        : `⚡ Instant paper ${side} executed on ${symbol} (Audit: ${audit.auditScore}/100 - ${audit.rating}) at $${asset.price}`,
+        ? `⚡ فتح صفقة فورية ${side} على ${symbol} (فحص: ${audit.auditScore}/100 - ${audit.arabicRating}) بسعر $${asset.price}`
+        : `⚡ Instant ${side} executed on ${symbol} (Audit: ${audit.auditScore}/100 - ${audit.rating}) at $${asset.price}`,
       'SUCCESS'
     );
   };
 
+  // Reset AI Adaptive state
   const handleResetAdaptive = () => {
     setAiAdaptiveState({
       currentLevel: 0,
@@ -1436,10 +1408,10 @@ export default function App() {
     });
     setConfig((c) => ({
       ...c,
-      minConfidence: 20,
+      minConfidence: 15,
       minScore: 25,
       maxOpenTrades: 4,
-      timeframe: '15m',
+      timeframe: '1h',
       useTrendFilter: true,
     }));
     addLog(
@@ -1450,6 +1422,7 @@ export default function App() {
     );
   };
 
+  // Toggle & Weight Strategies
   const handleToggleStrategy = (id: string) => {
     setStrategies((prev) =>
       prev.map((s) => (s.id === id ? { ...s, enabled: !s.enabled } : s))
@@ -1477,32 +1450,81 @@ export default function App() {
     addLog(isAr ? '🔄 تمت استعادة التوزيع الافتراضي للاستراتيجيات والأوزان.' : '🔄 Restored default strategy weights.', 'INFO');
   };
 
-  const handleToggleTradingMode = () => {
-    // Locked to PAPER MODE ONLY per Phase 11
+  // Database Management: Purge Database to start Pure Self Learning
+  const handlePurgeDatabase = () => {
+    setClosedTrades([]);
+    // In Pure Self Learning mode, zero out previous stats so the bot learns only from its own new executions
+    setStrategyPerformances([]);
+    setLearnedLessons([]);
+    try {
+      localStorage.removeItem('ai_trading_bot_lessons_v19');
+    } catch {
+      // ignore
+    }
+    setChartData([
+      {
+        time: new Date().toLocaleTimeString(isAr ? 'ar-EG' : 'en-US', { hour: '2-digit', minute: '2-digit' }),
+        balance: config.balance,
+        pnl: 0,
+      },
+    ]);
     addLog(
       isAr
-        ? '🛡️ التداول الحقيقي معطل برمجياً لضمان سلامة رأس المال (PAPER MODE ONLY).'
-        : '🛡️ Real execution is strictly disabled for safety (PAPER MODE ONLY).',
-      'WARN'
+        ? '🗑️ تم تفريغ قاعدة بيانات البوت وسجل التعلم بالكامل. سيبدأ البوت الآن بالتعلم الذاتي بناءً على صفقاته ونتائجه الحصرية فقط (Pure Self-Learning Mode).'
+        : '🗑️ Database and learning logs purged. The bot will now begin pure self-learning based exclusively on its own performance.',
+      'SUCCESS'
     );
   };
 
+  // Toggle Trading Mode (Paper with real live data <-> Real Live API)
+  const handleToggleTradingMode = () => {
+    if (config.tradingMode === 'PAPER') {
+      if (!config.binanceApiKey || !config.binanceApiSecret) {
+        setIsSettingsOpen(true);
+        addLog(
+          isAr
+            ? '⚠️ للانتقال إلى التداول الحقيقي (Live Binance API)، يرجى إدخال مفاتيح API الخاصة بك وحفظ الإعدادات أولاً.'
+            : '⚠️ To switch to Real Live Trading, please enter your Binance API Key and Secret in Settings first.',
+          'WARN'
+        );
+      } else {
+        setConfig((prev) => ({ ...prev, tradingMode: 'REAL' }));
+        addLog(
+          isAr
+            ? `🔴 تم الانتقال بنجاح إلى وضع التداول الحقيقي (Binance Futures ${config.binanceNetwork}).`
+            : `🔴 Successfully switched to Real Live Trading Mode (Binance Futures ${config.binanceNetwork}).`,
+          'SUCCESS'
+        );
+      }
+    } else {
+      setConfig((prev) => ({ ...prev, tradingMode: 'PAPER' }));
+      addLog(
+        isAr
+          ? '🟢 تم الانتقال بنجاح إلى وضع التداول التجريبي (Paper Trading) ببيانات السوق الحية الحقيقية.'
+          : '🟢 Successfully switched to Paper Trading Mode with live real-time market data feed.',
+        'INFO'
+      );
+    }
+  };
+
+  // Deep AI Strategy Exploitation & Optimization
   const handleDeepAIOptimization = () => {
     setStrategies((prevStrats) =>
       prevStrats.map((strat) => {
         const boost = getRegimeStrategyBoost(strat.category, currentRegime);
         const tunedWeight = Number((strat.weight * 0.8 + boost * 0.2).toFixed(2));
-        return { ...strat, weight: Math.max(0.3, Math.min(2.0, tunedWeight)) };
+        return { ...strat, weight: Math.max(0.3, Math.min(2.5, tunedWeight)) };
       })
     );
     addLog(
       isAr
-        ? `✨ [تحسين عميق للذكاء الاصطناعي] تمت إعادة مواءمة أوزان الـ 50+ استراتيجية مع بيئة السوق (${currentRegime}).`
-        : `✨ [Deep AI Optimization] Aligned all 50+ strategy weights with market regime (${currentRegime}).`,
+        ? `✨ [تحسين عميق للذكاء الاصطناعي] تمت إعادة مواءمة أوزان الـ 50+ استراتيجية مع بيئة السوق الحالية (${currentRegime}).`
+        : `✨ [Deep AI Optimization] Aligned all 50+ strategy weights with prevailing market regime (${currentRegime}).`,
       'SUCCESS'
     );
   };
 
+  // Restore Initial Benchmark Database
   const handleRestoreBenchmark = () => {
     setClosedTrades(INITIAL_CLOSED_TRADES);
     setStrategyPerformances(INITIAL_STRATEGY_PERFORMANCE);
@@ -1514,6 +1536,7 @@ export default function App() {
     );
   };
 
+  // Reset Balance Handler
   const handleResetBalance = (amount: number) => {
     setConfig((prev) => ({
       ...prev,
@@ -1530,12 +1553,13 @@ export default function App() {
     ]);
     addLog(
       isAr
-        ? `💰 تم ضبط رأس المال التجريبي إلى $${amount.toFixed(2)}.`
-        : `💰 Paper account balance reset to $${amount.toFixed(2)}.`,
+        ? `💰 تم ضبط رأس المال بنجاح إلى $${amount.toFixed(2)}.`
+        : `💰 Account balance reset to $${amount.toFixed(2)}.`,
       'SUCCESS'
     );
   };
 
+  // Simulation test triggers for Confidence Manager
   const handleSimulateWinStreak = () => {
     const bumped = Math.min(confidenceState.maxConfidence, confidenceState.currentConfidence + 5);
     setConfidenceState((prev) => ({
@@ -1801,7 +1825,7 @@ export default function App() {
         onClose={() => setIsSettingsOpen(false)}
         config={config}
         onSaveConfig={(newConfig) => {
-          setConfig({ ...newConfig, tradingMode: 'PAPER' });
+          setConfig(newConfig);
           addLog(
             isAr ? '⚙️ تم حفظ الإعدادات ووضع التداول بنجاح.' : '⚙️ Saved bot configuration successfully.',
             'SUCCESS'
