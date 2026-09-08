@@ -671,6 +671,111 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     />
                   </label>
 
+                  {/* Multi-Timeframe Alignment (15m / 1h / 4h) */}
+                  <label className="flex items-center justify-between p-2.5 rounded-lg bg-[#0b0e11] border border-[#2b2f36] cursor-pointer hover:border-emerald-500/40 transition">
+                    <div className="pr-2">
+                      <span className="font-semibold text-emerald-400 text-xs block">
+                        {t.tfaTitle}
+                      </span>
+                      <span className="text-[10px] text-[#848e9c]">
+                        {t.tfaDesc}
+                      </span>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={formData.enforceTimeFrameAlignment ?? true}
+                      onChange={(e) => setFormData({ ...formData, enforceTimeFrameAlignment: e.target.checked })}
+                      className="rounded text-emerald-400 focus:ring-0 accent-emerald-500 h-4 w-4 shrink-0"
+                    />
+                  </label>
+
+                  {/* Orderbook Liquidity Filter */}
+                  <div className="p-2.5 rounded-lg bg-[#0b0e11] border border-[#2b2f36] space-y-2">
+                    <label className="flex items-center justify-between cursor-pointer">
+                      <div className="pr-2">
+                        <span className="font-semibold text-[#eaecef] text-xs block">
+                          {t.orderbookDepthTitle}
+                        </span>
+                        <span className="text-[10px] text-[#848e9c]">
+                          {t.orderbookLiquidityWalls}
+                        </span>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={formData.orderbookFilterEnabled ?? true}
+                        onChange={(e) => setFormData({ ...formData, orderbookFilterEnabled: e.target.checked })}
+                        className="rounded text-[#fcd535] focus:ring-0 accent-[#fcd535] h-4 w-4 shrink-0"
+                      />
+                    </label>
+                    {formData.orderbookFilterEnabled && (
+                      <div className="pt-1 border-t border-[#1e2329] flex items-center justify-between text-xs">
+                        <span className="text-[#848e9c] text-[11px]">
+                          {isAr ? 'أقصى مسافة لحاجز السيولة المعاكس (%):' : 'Max Opposing Wall Distance (%):'}
+                        </span>
+                        <input
+                          type="number"
+                          step="0.5"
+                          min="1.0"
+                          max="5.0"
+                          value={formData.maxOpposingWallDistancePct ?? 2.5}
+                          onChange={(e) => setFormData({ ...formData, maxOpposingWallDistancePct: parseFloat(e.target.value) || 2.5 })}
+                          className="w-20 bg-[#181a20] border border-[#2b2f36] rounded px-2 py-1 text-[#fcd535] font-bold text-center"
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Smart Volatility Freeze */}
+                  <div className="p-2.5 rounded-lg bg-[#0b0e11] border border-[#2b2f36] space-y-2">
+                    <label className="flex items-center justify-between cursor-pointer">
+                      <div className="pr-2">
+                        <span className="font-semibold text-purple-400 text-xs block">
+                          {t.smartFreezeTitle}
+                        </span>
+                        <span className="text-[10px] text-[#848e9c]">
+                          {t.smartFreezeDesc}
+                        </span>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={formData.smartFreezeEnabled ?? true}
+                        onChange={(e) => setFormData({ ...formData, smartFreezeEnabled: e.target.checked })}
+                        className="rounded text-purple-400 focus:ring-0 accent-purple-500 h-4 w-4 shrink-0"
+                      />
+                    </label>
+                    {formData.smartFreezeEnabled && (
+                      <div className="grid grid-cols-2 gap-2 pt-1 border-t border-[#1e2329] text-xs">
+                        <div>
+                          <span className="text-[#848e9c] block text-[10px]">
+                            {isAr ? 'عتبة التذبذب الشاذ (%):' : 'Volatility Anomaly (%):'}
+                          </span>
+                          <input
+                            type="number"
+                            step="0.2"
+                            min="1.5"
+                            max="6.0"
+                            value={formData.smartFreezeThresholdPercent ?? 2.8}
+                            onChange={(e) => setFormData({ ...formData, smartFreezeThresholdPercent: parseFloat(e.target.value) || 2.8 })}
+                            className="w-full bg-[#181a20] border border-[#2b2f36] rounded px-2 py-1 text-purple-400 font-bold text-center"
+                          />
+                        </div>
+                        <div>
+                          <span className="text-[#848e9c] block text-[10px]">
+                            {isAr ? 'مدة التجميد (دقيقة):' : 'Freeze Duration (min):'}
+                          </span>
+                          <input
+                            type="number"
+                            min="5"
+                            max="60"
+                            value={formData.smartFreezeDurationMinutes ?? 15}
+                            onChange={(e) => setFormData({ ...formData, smartFreezeDurationMinutes: parseInt(e.target.value) || 15 })}
+                            className="w-full bg-[#181a20] border border-[#2b2f36] rounded px-2 py-1 text-[#eaecef] font-bold text-center"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
                   {/* Symbol Cooldown & Trigger Threshold */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1 text-xs font-mono">
                     <div>

@@ -45,8 +45,15 @@ import {
   getRegimeStrategyBoost,
   analyzeTradeErrorAndLearn,
   auditTradeSetup,
+  calculateTimeFrameAlignment,
+  detectSmartFreeze,
 } from './services/tradingEngine';
-import { fetchLiveBinancePrices } from './services/binanceService';
+import {
+  fetchLiveBinancePrices,
+  generateRealisticOrderbookDepth,
+  placeBinanceFuturesOrder,
+  fetchBinanceFuturesAccount,
+} from './services/binanceService';
 import { useLanguage } from './i18n/LanguageContext';
 
 import {
@@ -319,7 +326,44 @@ const DEFAULT_CONFIG: BotConfig = {
   breakEvenTriggerPercent: 1.0,
   strictAntiLossFilter: true,
   symbolCooldownMinutes: 10,
+  enforceTimeFrameAlignment: true,
+  orderbookFilterEnabled: true,
+  maxOpposingWallDistancePct: 2.5,
+  smartFreezeEnabled: true,
+  smartFreezeThresholdPercent: 2.8,
+  smartFreezeDurationMinutes: 15,
 };
+
+// Pre-calculate full market intelligence for instant, rich initial render
+const SEED_ASSETS: CryptoAsset[] = INITIAL_ASSETS.map((asset) => {
+  const tfa = calculateTimeFrameAlignment(asset);
+  const freeze = detectSmartFreeze(
+    asset.symbol,
+    [{ price: asset.price, timestamp: Date.now() - 5 * 60 * 1000 }],
+    DEFAULT_CONFIG,
+    asset.price
+  );
+  const obDepth = generateRealisticOrderbookDepth(
+    asset.symbol,
+    asset.price,
+    asset.ensembleSignal === 'NEUTRAL' ? undefined : asset.ensembleSignal,
+    DEFAULT_CONFIG.maxOpposingWallDistancePct || 2.5
+  );
+  const audit =
+    asset.ensembleSignal !== 'NEUTRAL'
+      ? auditTradeSetup(asset, asset.ensembleSignal, DEFAULT_CONFIG, 'BULL_TREND', INITIAL_STRATEGIES)
+      : undefined;
+
+  return {
+    ...asset,
+    timeframeAlignment: tfa,
+    smartFreeze: freeze,
+    orderbookDepth: obDepth,
+    auditScore: audit?.auditScore,
+    auditPassed: audit?.passed,
+    auditVerification: audit,
+  };
+});
 
 export default function App() {
   const { t, isAr } = useLanguage();
@@ -342,6 +386,12 @@ export default function App() {
           breakEvenTriggerPercent: parsed.breakEvenTriggerPercent ?? DEFAULT_CONFIG.breakEvenTriggerPercent,
           strictAntiLossFilter: parsed.strictAntiLossFilter ?? DEFAULT_CONFIG.strictAntiLossFilter,
           symbolCooldownMinutes: parsed.symbolCooldownMinutes ?? DEFAULT_CONFIG.symbolCooldownMinutes,
+          enforceTimeFrameAlignment: parsed.enforceTimeFrameAlignment ?? DEFAULT_CONFIG.enforceTimeFrameAlignment,
+          orderbookFilterEnabled: parsed.orderbookFilterEnabled ?? DEFAULT_CONFIG.orderbookFilterEnabled,
+          maxOpposingWallDistancePct: parsed.maxOpposingWallDistancePct ?? DEFAULT_CONFIG.maxOpposingWallDistancePct,
+          smartFreezeEnabled: parsed.smartFreezeEnabled ?? DEFAULT_CONFIG.smartFreezeEnabled,
+          smartFreezeThresholdPercent: parsed.smartFreezeThresholdPercent ?? DEFAULT_CONFIG.smartFreezeThresholdPercent,
+          smartFreezeDurationMinutes: parsed.smartFreezeDurationMinutes ?? DEFAULT_CONFIG.smartFreezeDurationMinutes,
         };
       }
     } catch {
@@ -355,7 +405,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'PROTECTION' | 'AI_ADAPTIVE' | 'TRADES_HISTORY'>('DASHBOARD');
 
   // State collections
-  const [assets, setAssets] = useState<CryptoAsset[]>(INITIAL_ASSETS);
+  const [assets, setAssets] = useState<CryptoAsset[]>(SEED_ASSETS);
   const [selectedSymbol, setSelectedSymbol] = useState<string>('BTCUSDT');
   const [activeTrades, setActiveTrades] = useState<Trade[]>([
     {
@@ -693,28 +743,53 @@ export default function App() {
           const newRsi = Math.min(85, Math.max(15, asset.rsi + rsiDelta));
           const newTrend = determineTrend(asset.ema20, asset.ema50, asset.ema200);
 
-          const { signal, confidence, longScore, shortScore } = evaluateEnsembleSignal(
-            asset,
-            strategies,
-            config.timeframe,
-            currentRegime
-          );
-
-          let assetAudit = undefined;
-          if (signal !== 'NEUTRAL') {
-            assetAudit = auditTradeSetup(asset, signal, config, currentRegime, strategies);
-          }
-
-          return {
+          const updatedAssetBase: CryptoAsset = {
             ...asset,
             price: newPrice,
             change24h: newChange,
             rsi: Number(newRsi.toFixed(1)),
             trend: newTrend,
+          };
+
+          const tfa = calculateTimeFrameAlignment(updatedAssetBase);
+          const freeze = detectSmartFreeze(
+            asset.symbol,
+            [{ price: asset.price, timestamp: Date.now() - 5 * 60 * 1000 }],
+            config,
+            newPrice
+          );
+          const obDepth = generateRealisticOrderbookDepth(
+            asset.symbol,
+            newPrice,
+            asset.ensembleSignal === 'NEUTRAL' ? undefined : asset.ensembleSignal,
+            config.maxOpposingWallDistancePct || 2.5
+          );
+
+          const { signal, confidence, longScore, shortScore } = evaluateEnsembleSignal(
+            updatedAssetBase,
+            strategies,
+            config.timeframe,
+            currentRegime
+          );
+
+          const fullyEnrichedAsset: CryptoAsset = {
+            ...updatedAssetBase,
+            timeframeAlignment: tfa,
+            smartFreeze: freeze,
+            orderbookDepth: obDepth,
             ensembleSignal: signal,
             confidence: Number(confidence.toFixed(1)),
             longScore: Number(longScore.toFixed(1)),
             shortScore: Number(shortScore.toFixed(1)),
+          };
+
+          let assetAudit = undefined;
+          if (signal !== 'NEUTRAL') {
+            assetAudit = auditTradeSetup(fullyEnrichedAsset, signal, config, currentRegime, strategies);
+          }
+
+          return {
+            ...fullyEnrichedAsset,
             auditScore: assetAudit?.auditScore,
             auditPassed: assetAudit?.passed,
             auditVerification: assetAudit,
@@ -757,6 +832,25 @@ export default function App() {
             };
 
             setClosedTrades((closedList) => [closed, ...closedList]);
+
+            // Real Binance Futures exit execution if in REAL trading mode
+            if (config.tradingMode === 'REAL' && config.binanceApiKey && config.binanceApiSecret) {
+              placeBinanceFuturesOrder({
+                symbol: closed.symbol,
+                side: closed.side === 'LONG' ? 'SELL' : 'BUY',
+                quantity: closed.size,
+                apiKey: config.binanceApiKey,
+                apiSecret: config.binanceApiSecret,
+                network: config.binanceNetwork,
+              }).then((res) => {
+                addLog(
+                  isAr
+                    ? `🌐 [إغلاق بينانس مباشر] تم إغلاق مركز ${closed.symbol} (${closed.side === 'LONG' ? 'SELL' : 'BUY'}): ${res.message}`
+                    : `🌐 [Binance Live Close] Closed ${closed.symbol} position: ${res.message}`,
+                  'INFO'
+                );
+              });
+            }
 
             setConfig((prevCfg) => ({
               ...prevCfg,
@@ -996,6 +1090,8 @@ export default function App() {
         const eligibleCandidates = assets.filter((asset) => {
           if (asset.ensembleSignal === 'NEUTRAL') return false;
           if (asset.confidence < config.currentConfidence) return false;
+          // Smart Volatility Freeze Protection: Reject coins undergoing violent anomalous spikes
+          if (config.smartFreezeEnabled !== false && asset.smartFreeze?.isFrozen) return false;
           // Anti-loss safeguard: Enforce symbol cooldown if recently stopped out
           if (lossCooldowns[asset.symbol] && lossCooldowns[asset.symbol] > now) return false;
           if (config.useTrendFilter) {
@@ -1067,6 +1163,34 @@ export default function App() {
               : `🛡️ [Precision Verified] Opened high-assurance ${side} on ${candidate.symbol} with audit score ${audit.auditScore}/100 (${audit.rating}) | Margin: $${sizeCalc.margin.toFixed(1)}`,
             'SUCCESS'
           );
+
+          // Real Binance Futures execution if in REAL trading mode
+          if (config.tradingMode === 'REAL' && config.binanceApiKey && config.binanceApiSecret) {
+            placeBinanceFuturesOrder({
+              symbol: candidate.symbol,
+              side: side === 'LONG' ? 'BUY' : 'SELL',
+              quantity: sizeCalc.size,
+              apiKey: config.binanceApiKey,
+              apiSecret: config.binanceApiSecret,
+              network: config.binanceNetwork,
+            }).then((res) => {
+              if (res.success) {
+                addLog(
+                  isAr
+                    ? `🌐 [بينانس فوري مباشر] تم تنفيذ أمر ${side} لـ ${candidate.symbol}: ${res.message}`
+                    : `🌐 [Binance Live Execution] Placed ${side} on ${candidate.symbol}: ${res.message}`,
+                  'SUCCESS'
+                );
+              } else {
+                addLog(
+                  isAr
+                    ? `⚠️ [تنبيه بينانس] إشعار تنفيذ لـ ${candidate.symbol}: ${res.message}`
+                    : `⚠️ [Binance Notice] Order response on ${candidate.symbol}: ${res.message}`,
+                  'WARN'
+                );
+              }
+            });
+          }
 
           setAiAdaptiveState((prev) => ({ ...prev, consecutiveIdleCycles: 0 }));
         } else if (auditedCandidates.length > 0) {

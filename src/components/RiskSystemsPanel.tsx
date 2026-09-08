@@ -312,6 +312,70 @@ export const RiskSystemsPanel: React.FC<RiskSystemsPanelProps> = ({
             </div>
           </div>
         </div>
+
+        {/* 9. Multi-Timeframe Trend Alignment (15m / 1h / 4h) */}
+        <div className="bg-[#1e2329] border border-emerald-500/30 rounded-xl p-3 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-[#eaecef] flex items-center gap-1.5 font-mono">
+              <Compass className="h-3.5 w-3.5 text-emerald-400" />
+              <span>9. {isAr ? 'توافق الأطر الزمنية الثلاثية (MTF)' : '3-Timeframe Trend Alignment'}</span>
+            </span>
+            <span className="text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-1.5 py-0.2 rounded font-mono">
+              {config.enforceTimeFrameAlignment !== false ? 'ENFORCED' : 'OFF'}
+            </span>
+          </div>
+          <p className="text-[11px] text-[#848e9c] leading-relaxed">
+            {isAr
+              ? 'يتحقق من توافق إشارة الدخول على إطار 15m مع المسار الوسيط 1h والاتجاه الأساسي 4h، ويحظر الشراء ضد هبوط 4h.'
+              : 'Verifies 15m entry signals align with 1h intermediate and 4h macro trend, blocking trades against higher timeframe momentum.'}
+          </p>
+          <div className="bg-[#0b0e11] rounded-lg p-2 text-[11px] font-mono text-[#848e9c] space-y-1">
+            <div className="flex justify-between">
+              <span>{isAr ? 'أطر التحقق:' : 'Monitored TFs:'}</span>
+              <span className="text-[#eaecef] font-bold">15m / 1h / 4h</span>
+            </div>
+            <div className="flex justify-between">
+              <span>{isAr ? 'حظر التعارض مع 4h:' : '4h Conflict Block:'}</span>
+              <span className="text-emerald-400 font-bold">{isAr ? 'حظر مطلق' : 'Absolute Reject'}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>{isAr ? 'وزن التدقيق:' : 'Audit Weight:'}</span>
+              <span className="text-[#fcd535] font-bold">15%</span>
+            </div>
+          </div>
+        </div>
+
+        {/* 10. Orderbook Walls & Smart Volatility Freeze */}
+        <div className="bg-[#1e2329] border border-purple-500/30 rounded-xl p-3 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-[#eaecef] flex items-center gap-1.5 font-mono">
+              <ShieldAlert className="h-3.5 w-3.5 text-purple-400" />
+              <span>10. {isAr ? 'دفتر أوامر بينانس والتجميد الذكي' : 'Orderbook Walls & Smart Freeze'}</span>
+            </span>
+            <span className="text-[10px] bg-purple-500/10 text-purple-400 border border-purple-500/30 px-1.5 py-0.2 rounded font-mono">
+              {config.smartFreezeEnabled !== false && config.orderbookFilterEnabled !== false ? 'ACTIVE' : 'STANDBY'}
+            </span>
+          </div>
+          <p className="text-[11px] text-[#848e9c] leading-relaxed">
+            {isAr
+              ? 'يرصد حواجز السيولة (Liquidity Walls) لرفض الصفقات المسدودة بجدران بيع أو شراء، ويجمد العملة 15 دقيقة عند حدوث تذبذب شاذ مفاجئ.'
+              : 'Detects opposing Binance liquidity walls to avoid trapped trades, and auto-freezes coin for 15m upon abnormal volatility spikes.'}
+          </p>
+          <div className="bg-[#0b0e11] rounded-lg p-2 text-[11px] font-mono text-[#848e9c] space-y-1">
+            <div className="flex justify-between">
+              <span>{isAr ? 'فلتر جدران السيولة:' : 'Wall Detection:'}</span>
+              <span className="text-[#fcd535] font-bold">&lt;= {config.maxOpposingWallDistancePct ?? 2.5}%</span>
+            </div>
+            <div className="flex justify-between">
+              <span>{isAr ? 'عتبة التذبذب الشاذ:' : 'Freeze Volatility:'}</span>
+              <span className="text-purple-400 font-bold">&gt;= {config.smartFreezeThresholdPercent ?? 2.8}% / 15m</span>
+            </div>
+            <div className="flex justify-between">
+              <span>{isAr ? 'مدة التجميد الوقائي:' : 'Freeze Window:'}</span>
+              <span className="text-[#eaecef] font-bold">{config.smartFreezeDurationMinutes ?? 15} min</span>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
