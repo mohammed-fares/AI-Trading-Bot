@@ -36,7 +36,7 @@ import {
   OrderbookDepthAnalysis,
 } from './types';
 
-import { INITIAL_STRATEGIES, INITIAL_STRATEGY_PERFORMANCE } from './data/strategies';
+import { CORE_CLASSICAL_STRATEGIES, INITIAL_STRATEGY_PERFORMANCE } from './data/strategies';
 import {
   determineTrend,
   evaluateEnsembleSignal,
@@ -66,10 +66,7 @@ import {
   ShieldAlert,
   Sparkles,
   History,
-  Atom,
 } from 'lucide-react';
-import { ScientificStrategyLab } from './components/ScientificStrategyLab';
-import { getStoredSynthesizedStrategies } from './services/aiStrategyGenerator';
 
 // Default assets to seed watchlist with initial PENDING state until first live fetch
 const INITIAL_ASSETS: CryptoAsset[] = [
@@ -329,7 +326,7 @@ const DEFAULT_CONFIG: BotConfig = {
   cycleIntervalSeconds: 15,
   testnetMode: true,
   pureSelfLearning: false,
-  strategyExecutionMode: 'SYNTHESIZED_ONLY', // Prioritize AI Synthesized / Innovative strategies
+  strategyExecutionMode: 'NATURAL_STRATEGIES', // Natural Classical Technical Strategies Focus
   timeframe: '15m',
   useTrendFilter: true,
   useSmartExit: true,
@@ -380,7 +377,7 @@ export default function App() {
 
   // Bot Operational Status
   const [status, setStatus] = useState<BotStatus>('RUNNING');
-  const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'PROTECTION' | 'AI_ADAPTIVE' | 'TRADES_HISTORY' | 'SCIENTIFIC_LAB'>('DASHBOARD');
+  const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'PROTECTION' | 'AI_ADAPTIVE' | 'TRADES_HISTORY'>('DASHBOARD');
 
   // Config & Portfolio
   const [config, setConfig] = useState<BotConfig>(DEFAULT_CONFIG);
@@ -388,15 +385,7 @@ export default function App() {
   const [selectedSymbol, setSelectedSymbol] = useState<string>('BTCUSDT');
   const [activeTrades, setActiveTrades] = useState<Trade[]>([]);
   const [closedTrades, setClosedTrades] = useState<Trade[]>(INITIAL_CLOSED_TRADES);
-  const [strategies, setStrategies] = useState<Strategy[]>(() => {
-    const storedCustom = getStoredSynthesizedStrategies();
-    if (storedCustom.length > 0) {
-      const existingIds = new Set(INITIAL_STRATEGIES.map((s) => s.id));
-      const uniqueCustom = storedCustom.filter((s) => !existingIds.has(s.id));
-      return [...uniqueCustom, ...INITIAL_STRATEGIES];
-    }
-    return INITIAL_STRATEGIES;
-  });
+  const [strategies, setStrategies] = useState<Strategy[]>(CORE_CLASSICAL_STRATEGIES);
   const [strategyPerformances, setStrategyPerformances] = useState<StrategyPerformance[]>(INITIAL_STRATEGY_PERFORMANCE);
   const [learnedLessons, setLearnedLessons] = useState<AILearnedLesson[]>([]);
 
@@ -810,13 +799,13 @@ export default function App() {
           lastDataError: undefined,
         };
 
-        // 9. Ensemble Signal (prioritizing synthesized innovative strategies)
+        // 9. Ensemble Signal (prioritizing natural technical strategies)
         const { signal, confidence, longScore, shortScore, leadingStrategy } = evaluateEnsembleSignal(
           candidateAsset,
           strategies,
           config.timeframe,
           currentRegime,
-          config.strategyExecutionMode || 'SYNTHESIZED_ONLY'
+          config.strategyExecutionMode || 'NATURAL_STRATEGIES'
         );
 
         candidateAsset.ensembleSignal = signal;
@@ -1204,7 +1193,7 @@ export default function App() {
             const strategyTitle =
               candidate.leadingStrategy?.arabicName ||
               candidate.leadingStrategy?.name ||
-              (isAr ? 'استراتيجية كمومية مبتكرة' : 'Quantum Synthesized Strategy');
+              (isAr ? 'استراتيجية التحليل الفني (Trend 15m)' : 'Technical Analysis Strategy (Trend 15m)');
 
             const newTrade: Trade = {
               id: `tr-live-${Date.now()}`,
@@ -1232,8 +1221,8 @@ export default function App() {
             setActiveTrades((prev) => [...prev, newTrade]);
             addLog(
               isAr
-                ? `🚀 [تنفيذ استراتيجية مبتكرة] فتح صفقة تجريبية ${side} على ${candidate.symbol} عبر: "${strategyTitle}" | فحص: ${audit.auditScore}/100 (${audit.arabicRating}) | هامش: $${sizeCalc.margin.toFixed(1)}`
-                : `🚀 [Innovative Strategy Executed] Opened paper ${side} on ${candidate.symbol} via: "${strategyTitle}" | Audit: ${audit.auditScore}/100 (${audit.rating}) | Margin: $${sizeCalc.margin.toFixed(1)}`,
+                ? `🚀 [تنفيذ استراتيجية طبيعية] فتح صفقة تجريبية ${side} على ${candidate.symbol} عبر: "${strategyTitle}" | فحص: ${audit.auditScore}/100 (${audit.arabicRating}) | هامش: $${sizeCalc.margin.toFixed(1)}`
+                : `🚀 [Natural Strategy Executed] Opened paper ${side} on ${candidate.symbol} via: "${strategyTitle}" | Audit: ${audit.auditScore}/100 (${audit.rating}) | Margin: $${sizeCalc.margin.toFixed(1)}`,
               'SUCCESS'
             );
 
@@ -1471,7 +1460,7 @@ export default function App() {
       return;
     }
 
-    // Evaluate candidates with synthesized innovative strategies
+    // Evaluate candidates with natural technical strategies
     let bestCandidate: {
       asset: CryptoAsset;
       side: 'LONG' | 'SHORT';
@@ -1486,7 +1475,7 @@ export default function App() {
         strategies,
         config.timeframe,
         currentRegime,
-        'SYNTHESIZED_ONLY'
+        'NATURAL_STRATEGIES'
       );
 
       const side: 'LONG' | 'SHORT' =
@@ -1510,7 +1499,7 @@ export default function App() {
       const strategyTitle =
         evalRes.leadingStrategy?.arabicName ||
         evalRes.leadingStrategy?.name ||
-        (isAr ? `[ابتكار الذكاء الاصطناعي] نفق شرودنغر للسيولة` : `[AI Synthesized] Quantum Tunneling`);
+        (isAr ? `استراتيجية التحليل الفني (Trend 15m)` : `Trend Following 15m`);
 
       if (audit.auditScore > highestScore) {
         highestScore = audit.auditScore;
@@ -1533,7 +1522,7 @@ export default function App() {
       const tpDist = candidate.price * (config.takeProfitPercent / 100);
 
       const newTrade: Trade = {
-        id: `tr-innovative-${Date.now()}`,
+        id: `tr-natural-${Date.now()}`,
         symbol: candidate.symbol,
         side,
         entryPrice: candidate.price,
@@ -1566,8 +1555,8 @@ export default function App() {
       setActiveTrades((prev) => [...prev, newTrade]);
       addLog(
         isAr
-          ? `⚡ [تنفيذ فوري ناجح] تم فتح صفقة ${side} فورية على ${candidate.symbol} بنموذج: "${strategyTitle}" | درجة الجودة: ${newTrade.auditScore}/100 | هامش: $${sizeCalc.margin.toFixed(1)}`
-          : `⚡ [Instant Innovative Trade] Opened ${side} on ${candidate.symbol} via: "${strategyTitle}" | Quality: ${newTrade.auditScore}/100 | Margin: $${sizeCalc.margin.toFixed(1)}`,
+          ? `⚡ [تحليل الاستراتيجيات الطبيعية] فتح صفقة تجريبية ${side} على ${candidate.symbol} عبر استراتيجية: "${strategyTitle}" | فحص الجودة: ${newTrade.auditScore}/100 | هامش: $${sizeCalc.margin.toFixed(1)}`
+          : `⚡ [Natural Strategy Trade] Opened paper ${side} on ${candidate.symbol} via: "${strategyTitle}" | Audit Quality: ${newTrade.auditScore}/100 | Margin: $${sizeCalc.margin.toFixed(1)}`,
         'SUCCESS'
       );
     }
@@ -1618,7 +1607,7 @@ export default function App() {
 
   const handleEnableAllStrategies = () => {
     setStrategies((prev) => prev.map((s) => ({ ...s, enabled: true })));
-    addLog(isAr ? '✓ تم تفعيل جميع الـ 200+ استراتيجية تداول.' : '✓ Enabled all 200+ strategies.', 'SUCCESS');
+    addLog(isAr ? '✓ تم تفعيل جميع الاستراتيجيات الفنية الطبيعية.' : '✓ Enabled all natural technical strategies.', 'SUCCESS');
   };
 
   const handleDisableAllStrategies = () => {
@@ -1626,43 +1615,9 @@ export default function App() {
     addLog(isAr ? '⚠️ تم تعطيل جميع الاستراتيجيات.' : '⚠️ Disabled all strategies.', 'WARN');
   };
 
-  const handleEnableAllScientific = () => {
-    setStrategies((prev) =>
-      prev.map((s) => (s.category === 'scientific' || s.isProprietaryAI ? { ...s, enabled: true } : s))
-    );
-    addLog(
-      isAr
-        ? '⚛️ تم تفعيل جميع الاستراتيجيات العلمية والكمومية (149+ استراتيجية).'
-        : '⚛️ Enabled all scientific & quantum strategies (149+).',
-      'SUCCESS'
-    );
-  };
-
-  const handleDisableAllScientific = () => {
-    setStrategies((prev) =>
-      prev.map((s) => (s.category === 'scientific' || s.isProprietaryAI ? { ...s, enabled: false } : s))
-    );
-    addLog(
-      isAr
-        ? '⚠️ تم تعطيل الاستراتيجيات العلمية والفيزيائية مؤقتاً.'
-        : '⚠️ Disabled scientific & quantum strategies temporarily.',
-      'WARN'
-    );
-  };
-
-  const handleAddSynthesizedStrategy = (newStrategy: Strategy) => {
-    setStrategies((prev) => [newStrategy, ...prev.filter((s) => s.id !== newStrategy.id)]);
-    addLog(
-      isAr
-        ? `✨ [ابتكار ذكاء اصطناعي جديد] تم دمج استراتيجية "${newStrategy.arabicName}" لعملة ${newStrategy.applicableSymbols?.join(', ')} في محرك التداول بنجاح!`
-        : `✨ [AI Innovation] Synthesized strategy "${newStrategy.name}" for ${newStrategy.applicableSymbols?.join(', ')} integrated into engine!`,
-      'SUCCESS'
-    );
-  };
-
   const handleResetStrategies = () => {
-    setStrategies(INITIAL_STRATEGIES);
-    addLog(isAr ? '🔄 تمت استعادة التوزيع الافتراضي للاستراتيجيات والأوزان.' : '🔄 Restored default strategy weights.', 'INFO');
+    setStrategies(CORE_CLASSICAL_STRATEGIES);
+    addLog(isAr ? '🔄 تمت استعادة الاستراتيجيات الفنية الطبيعية الافتراضية.' : '🔄 Restored default natural technical strategies.', 'INFO');
   };
 
   const handleToggleTradingMode = () => {
@@ -1837,21 +1792,6 @@ export default function App() {
           </button>
 
           <button
-            onClick={() => setActiveTab('SCIENTIFIC_LAB')}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl transition font-semibold whitespace-nowrap ${
-              activeTab === 'SCIENTIFIC_LAB'
-                ? 'bg-purple-950/60 text-purple-300 border border-purple-500/40 shadow-sm'
-                : 'bg-[#181a20] text-[#848e9c] hover:text-purple-300 hover:bg-[#1e2329] border border-transparent'
-            }`}
-          >
-            <Atom className="h-4 w-4 text-purple-400" />
-            <span>{isAr ? 'مختبر الاستراتيجيات العلمية والكمومية' : 'AI Scientific Lab'}</span>
-            <span className="text-[10px] px-1.5 py-0.2 rounded font-mono bg-purple-900/60 text-purple-200 border border-purple-500/30">
-              {strategies.length}
-            </span>
-          </button>
-
-          <button
             onClick={() => setActiveTab('PROTECTION')}
             className={`flex items-center gap-2 px-3.5 py-2 rounded-xl transition font-semibold whitespace-nowrap ${
               activeTab === 'PROTECTION'
@@ -1940,19 +1880,6 @@ export default function App() {
                 onForceTrade={handleForceTrade}
               />
             </div>
-          </div>
-        )}
-
-        {activeTab === 'SCIENTIFIC_LAB' && (
-          <div className="space-y-4">
-            <ScientificStrategyLab
-              strategies={strategies}
-              onToggleStrategy={handleToggleStrategy}
-              onUpdateWeight={handleUpdateWeight}
-              onAddSynthesizedStrategy={handleAddSynthesizedStrategy}
-              onEnableAllScientific={handleEnableAllScientific}
-              onDisableAllScientific={handleDisableAllScientific}
-            />
           </div>
         )}
 

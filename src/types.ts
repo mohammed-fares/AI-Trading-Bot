@@ -56,7 +56,7 @@ export interface Strategy {
   description: string;
   enabled: boolean;
   weight: number; // default 1.0
-  category: 'scalping' | 'momentum' | 'trend' | 'swing' | 'daily' | 'scientific';
+  category: 'scalping' | 'momentum' | 'trend' | 'swing' | 'daily' | 'scientific' | 'breakout';
   // Scientific & Asset-Specific Dimensions
   scientificDomain?: ScientificDomain;
   scientificFormula?: string;
@@ -232,7 +232,9 @@ export interface CryptoAsset {
   trend: MarketTrend;
   rsi: number;
   macdSignal: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
+  macdHist?: number;
   adx: number;
+  atr?: number;
   // Ensemble Signal for this asset
   ensembleSignal: 'LONG' | 'SHORT' | 'NEUTRAL';
   longScore: number;
@@ -328,8 +330,8 @@ export interface BotConfig {
   binanceApiSecret: string;
   binanceNetwork: 'TESTNET' | 'PRODUCTION';
   pureSelfLearning: boolean;
-  // Strategy Execution Focus (Synthesized AI vs All)
-  strategyExecutionMode?: 'SYNTHESIZED_ONLY' | 'SYNTHESIZED_PRIORITY' | 'ALL_STRATEGIES';
+  // Strategy Execution Focus (Natural Classical Strategies vs All)
+  strategyExecutionMode?: 'NATURAL_STRATEGIES' | 'ALL_STRATEGIES';
   // High-Precision Trade Verification & Scrutiny
   precisionAuditMode: boolean;
   minAuditScore: number; // default: 75%

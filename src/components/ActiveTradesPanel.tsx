@@ -85,10 +85,10 @@ export const ActiveTradesPanel: React.FC<ActiveTradesPanelProps> = ({ trades, on
                           <span className="font-bold text-[#eaecef] text-xs">{trade.symbol}</span>
                           {trade.strategyUsed && (
                             <div
-                              className="text-[10px] text-purple-300 font-sans font-medium truncate max-w-[130px] sm:max-w-[160px]"
+                              className="text-[10px] text-emerald-300 font-sans font-medium truncate max-w-[130px] sm:max-w-[160px]"
                               title={trade.strategyUsed}
                             >
-                              ⚡ {trade.strategyUsed}
+                              📊 {trade.strategyUsed}
                             </div>
                           )}
                           <div className="text-[9px] text-[#848e9c]">

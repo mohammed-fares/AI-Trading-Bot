@@ -569,7 +569,7 @@ export function evaluateEnsembleSignal(
   strategies: Strategy[],
   timeframe: string,
   regime: MarketRegime = 'BULL_TREND',
-  executionMode: 'SYNTHESIZED_ONLY' | 'SYNTHESIZED_PRIORITY' | 'ALL_STRATEGIES' = 'SYNTHESIZED_ONLY'
+  executionMode?: 'NATURAL_STRATEGIES' | 'ALL_STRATEGIES'
 ): {
   signal: 'LONG' | 'SHORT' | 'NEUTRAL';
   longScore: number;
@@ -590,20 +590,9 @@ export function evaluateEnsembleSignal(
   // Normalized asset symbol (e.g. BTCUSDT from BTC/USDT or BTCUSDT)
   const normSymbol = asset.symbol.replace(/[\/\-_]/g, '').toUpperCase();
 
-  // Intelligent Strategy Filtering based on executionMode & applicable symbols
+  // Natural strategy filtering based on enabled status & applicable symbols
   const applicableStrategies = strategies.filter((s) => {
     if (!s.enabled) return false;
-
-    // Filter by executionMode:
-    const isSynthesizedOrScientific =
-      Boolean(s.isProprietaryAI) ||
-      s.category === 'scientific' ||
-      s.id.startsWith('strat-syn-') ||
-      s.id.startsWith('strat-ai-syn-');
-
-    if (executionMode === 'SYNTHESIZED_ONLY' && !isSynthesizedOrScientific) {
-      return false; // Skip classical default strategies when in Synthesized Only mode
-    }
 
     // Match symbol applicability
     if (s.applicableSymbols && s.applicableSymbols.length > 0 && !s.applicableSymbols.includes('ALL')) {
@@ -619,145 +608,198 @@ export function evaluateEnsembleSignal(
     let stratSignal: 'LONG' | 'SHORT' | 'NEUTRAL' = 'NEUTRAL';
     let stratConfidence = 0.6;
 
-    const isSynthesized = Boolean(strategy.isProprietaryAI) || strategy.category === 'scientific';
-    const domain = strategy.scientificDomain;
+    // 📊 Comprehensive Technical Analysis for Natural Trading Strategies
+    const indicatorsLower = (strategy.indicators || '').toLowerCase();
+    const nameLower = (strategy.name || '').toLowerCase();
+    const idLower = (strategy.id || '').toLowerCase();
+    const cat = strategy.category;
 
-    if (isSynthesized && domain) {
-      // ⚛️ Advanced Domain-Specific Scientific Model Execution
-      switch (domain) {
-        case 'QUANTUM': {
-          // Wavepacket dispersion & potential barrier tunneling near EMA levels
-          const distEma50Pct = ((asset.price - asset.ema50) / asset.ema50) * 100;
-          if (Math.abs(distEma50Pct) <= 2.5) {
-            // High probability tunneling zone
-            if (asset.macdSignal === 'BULLISH' || (asset.trend === 'UP' && asset.rsi <= 65)) {
-              stratSignal = 'LONG';
-              stratConfidence = 0.88;
-            } else if (asset.macdSignal === 'BEARISH' || (asset.trend === 'DOWN' && asset.rsi >= 35)) {
-              stratSignal = 'SHORT';
-              stratConfidence = 0.88;
-            }
-          } else if (asset.rsi < 35) {
-            stratSignal = 'LONG'; // Quantum ground-state rebound
-            stratConfidence = 0.82;
-          } else if (asset.rsi > 70) {
-            stratSignal = 'SHORT'; // Quantum potential barrier reflection
-            stratConfidence = 0.82;
-          } else if (asset.trend === 'UP') {
-            stratSignal = 'LONG';
-            stratConfidence = 0.78;
-          } else if (asset.trend === 'DOWN') {
-            stratSignal = 'SHORT';
-            stratConfidence = 0.78;
-          }
-          break;
+    // Derived technical indicators context
+    const priceAboveEma20 = asset.price > asset.ema20;
+    const priceAboveEma50 = asset.price > asset.ema50;
+    const emaBullishCascade = asset.ema20 > asset.ema50 && (asset.ema50 > (asset.ema200 || 0));
+    const emaBearishCascade = asset.ema20 < asset.ema50 && (asset.ema50 < (asset.ema200 || Infinity));
+    const distEma20Pct = asset.ema20 > 0 ? ((asset.price - asset.ema20) / asset.ema20) * 100 : 0;
+
+    // Bollinger Band bounds calculated from EMA20 and ATR
+    const atrBand = (asset.atr && asset.atr > 0) ? asset.atr * 1.8 : asset.price * 0.02;
+    const upperBB = asset.ema20 + atrBand;
+    const lowerBB = asset.ema20 - atrBand;
+
+    if (cat === 'trend' || nameLower.includes('trend') || idLower.includes('trend') || nameLower.includes('golden')) {
+      // 1. Trend Following Strategies (EMA Alignments, Golden Cross, SuperTrend)
+      if (asset.trend === 'UP' && priceAboveEma50) {
+        if (asset.macdSignal === 'BULLISH' || (asset.rsi >= 40 && asset.rsi <= 65)) {
+          stratSignal = 'LONG';
+          stratConfidence = emaBullishCascade ? 0.86 : 0.78;
+        } else if (asset.rsi > 70) {
+          stratSignal = 'NEUTRAL'; // Overbought exhaustion
+          stratConfidence = 0.5;
         }
-
-        case 'FLUID_DYNAMICS': {
-          // Navier-Stokes liquidity vorticity & velocity flux
-          const priceVelocity = asset.change24h;
-          if (asset.trend === 'UP' && asset.macdSignal !== 'BEARISH') {
-            stratSignal = 'LONG';
-            stratConfidence = 0.86;
-          } else if (asset.trend === 'DOWN' && asset.macdSignal !== 'BULLISH') {
-            stratSignal = 'SHORT';
-            stratConfidence = 0.86;
-          } else if (priceVelocity > 1.2 && asset.rsi < 68) {
-            stratSignal = 'LONG';
-            stratConfidence = 0.80;
-          } else if (priceVelocity < -1.2 && asset.rsi > 32) {
-            stratSignal = 'SHORT';
-            stratConfidence = 0.80;
-          }
-          break;
+      } else if (asset.trend === 'DOWN' && !priceAboveEma50) {
+        if (asset.macdSignal === 'BEARISH' || (asset.rsi <= 60 && asset.rsi >= 35)) {
+          stratSignal = 'SHORT';
+          stratConfidence = emaBearishCascade ? 0.86 : 0.78;
+        } else if (asset.rsi < 30) {
+          stratSignal = 'NEUTRAL'; // Oversold exhaustion
+          stratConfidence = 0.5;
         }
-
-        case 'THERMODYNAMICS': {
-          // Carnot cycle orderbook free energy and temperature gradient
-          const ob = asset.orderbookDepth;
-          if (ob && ob.bidAskRatio > 1.1) {
-            stratSignal = 'LONG';
-            stratConfidence = 0.85;
-          } else if (ob && ob.bidAskRatio < 0.9) {
-            stratSignal = 'SHORT';
-            stratConfidence = 0.85;
-          } else if (asset.rsi < 45 && asset.trend !== 'DOWN') {
-            stratSignal = 'LONG';
-            stratConfidence = 0.80;
-          } else if (asset.rsi > 60 && asset.trend !== 'UP') {
-            stratSignal = 'SHORT';
-            stratConfidence = 0.80;
-          }
-          break;
-        }
-
-        case 'STOCHASTIC':
-        case 'CHAOS_FRACTAL':
-        case 'INFORMATION_THEORY':
-        default: {
-          // Lorentz expansion, Lyapunov horizon, and Shannon information compression
-          if (asset.trend === 'UP' && asset.rsi <= 65) {
-            stratSignal = 'LONG';
-            stratConfidence = 0.84;
-          } else if (asset.trend === 'DOWN' && asset.rsi >= 35) {
-            stratSignal = 'SHORT';
-            stratConfidence = 0.84;
-          } else if (asset.macdSignal === 'BULLISH') {
-            stratSignal = 'LONG';
-            stratConfidence = 0.76;
-          } else if (asset.macdSignal === 'BEARISH') {
-            stratSignal = 'SHORT';
-            stratConfidence = 0.76;
-          }
-          break;
+      } else {
+        // Trend transition / consolidation
+        if (asset.macdSignal === 'BULLISH' && priceAboveEma20) {
+          stratSignal = 'LONG';
+          stratConfidence = 0.68;
+        } else if (asset.macdSignal === 'BEARISH' && !priceAboveEma20) {
+          stratSignal = 'SHORT';
+          stratConfidence = 0.68;
         }
       }
-    } else {
-      // Classical baseline strategy logic
-      if (asset.trend === 'UP') {
-        if (asset.rsi < 48) {
+    } else if (indicatorsLower.includes('macd') || nameLower.includes('macd') || idLower.includes('macd')) {
+      // 2. MACD Momentum & Histogram Strategies
+      if (asset.macdSignal === 'BULLISH') {
+        if (asset.trend !== 'DOWN' && asset.rsi < 68) {
           stratSignal = 'LONG';
-          stratConfidence = 0.75;
-        } else if (asset.rsi > 70) {
-          stratSignal = 'NEUTRAL';
-          stratConfidence = 0.5;
+          stratConfidence = (asset.macdHist !== undefined && asset.macdHist > 0) ? 0.84 : 0.76;
+        } else if (asset.trend === 'DOWN' && asset.rsi < 42) {
+          // Rebound from downtrend base
+          stratSignal = 'LONG';
+          stratConfidence = 0.68;
+        }
+      } else if (asset.macdSignal === 'BEARISH') {
+        if (asset.trend !== 'UP' && asset.rsi > 32) {
+          stratSignal = 'SHORT';
+          stratConfidence = (asset.macdHist !== undefined && asset.macdHist < 0) ? 0.84 : 0.76;
+        } else if (asset.trend === 'UP' && asset.rsi > 58) {
+          stratSignal = 'SHORT';
+          stratConfidence = 0.68;
+        }
+      }
+    } else if (indicatorsLower.includes('rsi') || nameLower.includes('rsi') || idLower.includes('rsi')) {
+      // 3. RSI Oscillators & Divergence Strategies
+      if (nameLower.includes('divergence') || idLower.includes('divergence')) {
+        if (asset.rsi < 36 && asset.macdSignal === 'BULLISH') {
+          stratSignal = 'LONG'; // Bullish Divergence
+          stratConfidence = 0.86;
+        } else if (asset.rsi > 64 && asset.macdSignal === 'BEARISH') {
+          stratSignal = 'SHORT'; // Bearish Divergence
+          stratConfidence = 0.86;
+        }
+      } else {
+        if (asset.rsi < 34) {
+          stratSignal = 'LONG'; // Oversold bounce
+          stratConfidence = 0.82;
+        } else if (asset.rsi > 68) {
+          stratSignal = 'SHORT'; // Overbought rejection
+          stratConfidence = 0.82;
+        } else if (asset.trend === 'UP' && asset.rsi >= 42 && asset.rsi <= 62) {
+          stratSignal = 'LONG'; // Continuation channel
+          stratConfidence = 0.78;
+        } else if (asset.trend === 'DOWN' && asset.rsi >= 38 && asset.rsi <= 58) {
+          stratSignal = 'SHORT';
+          stratConfidence = 0.78;
+        }
+      }
+    } else if (indicatorsLower.includes('bollinger') || nameLower.includes('bb') || idLower.includes('bb') || idLower.includes('mean_reversion')) {
+      // 4. Bollinger Bands & Mean Reversion Strategies
+      if (nameLower.includes('squeeze') || idLower.includes('squeeze')) {
+        if (asset.trend === 'UP' && priceAboveEma20) {
+          stratSignal = 'LONG';
+          stratConfidence = 0.80;
+        } else if (asset.trend === 'DOWN' && !priceAboveEma20) {
+          stratSignal = 'SHORT';
+          stratConfidence = 0.80;
+        }
+      } else {
+        if (asset.price <= lowerBB || asset.rsi < 35) {
+          stratSignal = 'LONG'; // Lower band recovery
+          stratConfidence = 0.83;
+        } else if (asset.price >= upperBB || asset.rsi > 65) {
+          stratSignal = 'SHORT'; // Upper band pullback
+          stratConfidence = 0.83;
+        } else if (asset.trend === 'UP' && Math.abs(distEma20Pct) < 1.2) {
+          stratSignal = 'LONG'; // EMA20 pullback support
+          stratConfidence = 0.76;
+        } else if (asset.trend === 'DOWN' && Math.abs(distEma20Pct) < 1.2) {
+          stratSignal = 'SHORT';
+          stratConfidence = 0.76;
+        }
+      }
+    } else if (cat === 'scalping' || nameLower.includes('scalp') || idLower.includes('scalp')) {
+      // 5. High-Frequency Scalping Strategies
+      if (asset.trend === 'UP') {
+        if (asset.rsi < 48 && distEma20Pct < 1.0) {
+          stratSignal = 'LONG';
+          stratConfidence = 0.82;
         } else if (asset.macdSignal === 'BULLISH') {
           stratSignal = 'LONG';
-          stratConfidence = 0.72;
-        } else {
-          stratSignal = 'LONG';
-          stratConfidence = 0.65;
+          stratConfidence = 0.75;
         }
       } else if (asset.trend === 'DOWN') {
-        if (asset.rsi > 52) {
+        if (asset.rsi > 52 && distEma20Pct > -1.0) {
           stratSignal = 'SHORT';
-          stratConfidence = 0.75;
-        } else if (asset.rsi < 30) {
-          stratSignal = 'NEUTRAL';
-          stratConfidence = 0.5;
+          stratConfidence = 0.82;
         } else if (asset.macdSignal === 'BEARISH') {
           stratSignal = 'SHORT';
-          stratConfidence = 0.72;
-        } else {
-          stratSignal = 'SHORT';
-          stratConfidence = 0.65;
+          stratConfidence = 0.75;
         }
       } else {
         if (asset.rsi < 35) {
           stratSignal = 'LONG';
-          stratConfidence = 0.65;
+          stratConfidence = 0.72;
         } else if (asset.rsi > 65) {
           stratSignal = 'SHORT';
-          stratConfidence = 0.65;
+          stratConfidence = 0.72;
+        }
+      }
+    } else if (cat === 'breakout' || nameLower.includes('breakout') || idLower.includes('breakout') || indicatorsLower.includes('volume')) {
+      // 6. Breakout & Volume Analysis Strategies
+      const isNearHigh = asset.high24h > 0 && asset.price >= asset.high24h * 0.985;
+      const isNearLow = asset.low24h > 0 && asset.price <= asset.low24h * 1.015;
+      if (isNearHigh && asset.change24h > 0.5) {
+        stratSignal = 'LONG';
+        stratConfidence = 0.84;
+      } else if (isNearLow && asset.change24h < -0.5) {
+        stratSignal = 'SHORT';
+        stratConfidence = 0.84;
+      } else if (asset.trend === 'UP' && asset.change24h > 1.2) {
+        stratSignal = 'LONG';
+        stratConfidence = 0.78;
+      } else if (asset.trend === 'DOWN' && asset.change24h < -1.2) {
+        stratSignal = 'SHORT';
+        stratConfidence = 0.78;
+      }
+    } else {
+      // 7. Standard Technical Baseline (Stochastic, EMA Ribbon, Support/Resistance, Fibonacci)
+      if (asset.trend === 'UP') {
+        if (priceAboveEma20 && asset.rsi <= 62) {
+          stratSignal = 'LONG';
+          stratConfidence = 0.78;
+        } else if (asset.macdSignal === 'BULLISH') {
+          stratSignal = 'LONG';
+          stratConfidence = 0.74;
+        }
+      } else if (asset.trend === 'DOWN') {
+        if (!priceAboveEma20 && asset.rsi >= 38) {
+          stratSignal = 'SHORT';
+          stratConfidence = 0.78;
+        } else if (asset.macdSignal === 'BEARISH') {
+          stratSignal = 'SHORT';
+          stratConfidence = 0.74;
+        }
+      } else {
+        if (asset.rsi < 38) {
+          stratSignal = 'LONG';
+          stratConfidence = 0.70;
+        } else if (asset.rsi > 62) {
+          stratSignal = 'SHORT';
+          stratConfidence = 0.70;
         }
       }
     }
 
     const regimeMultiplier = getRegimeStrategyBoost(strategy.category, regime);
-    const tfMultiplier = strategy.timeframe === timeframe ? 1.15 : 1.0;
-    // Synthesized priority boost
-    const synthBoost = isSynthesized && executionMode === 'SYNTHESIZED_PRIORITY' ? 3.0 : 1.0;
-    const finalWeight = strategy.weight * regimeMultiplier * tfMultiplier * synthBoost;
+    const tfMultiplier = strategy.timeframe === timeframe ? 1.2 : 1.0;
+    const finalWeight = strategy.weight * regimeMultiplier * tfMultiplier;
     const stratScore = stratConfidence * finalWeight;
 
     if (stratSignal === 'LONG') {

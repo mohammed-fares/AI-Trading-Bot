@@ -43,7 +43,7 @@ interface ControlPanelProps {
   onOpenStrategies: () => void;
   onPurgeDatabase?: () => void;
   onOpenDatabase?: () => void;
-  onExecuteInstantInnovativeTrade?: () => void;
+  onExecuteInstantNaturalTrade?: () => void;
 }
 
 export const ControlPanel: React.FC<ControlPanelProps> = ({
@@ -63,7 +63,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
   onOpenStrategies,
   onPurgeDatabase,
   onOpenDatabase,
-  onExecuteInstantInnovativeTrade,
+  onExecuteInstantNaturalTrade,
 }) => {
   const { t, isAr } = useLanguage();
   const [editingBalance, setEditingBalance] = useState(false);
@@ -375,110 +375,57 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
         )}
       </div>
 
-      {/* Innovative Strategies Engine & Execution Mode */}
+      {/* Natural Technical Strategies Engine */}
       <div className="space-y-2.5 pt-2 border-t border-[#2b2f36]">
         <div className="flex items-center justify-between">
-          <span className="text-xs font-bold uppercase tracking-wider text-purple-300 flex items-center gap-1.5">
-            <Atom className="h-4 w-4 text-purple-400" />
-            <span>{isAr ? 'محرك الاستراتيجيات المبتكرة' : 'Innovative Strategies Engine'}</span>
+          <span className="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+            <TrendingUp className="h-4 w-4 text-emerald-400" />
+            <span>{isAr ? 'محرك الاستراتيجيات الطبيعية' : 'Natural Technical Strategies'}</span>
           </span>
-          <span className="text-[10px] font-mono font-bold text-purple-300 bg-purple-950/70 border border-purple-500/40 px-2 py-0.5 rounded">
-            {config.strategyExecutionMode === 'SYNTHESIZED_ONLY'
-              ? (isAr ? '⚡ مبتكرة حصراً' : '⚡ Innovative Only')
-              : config.strategyExecutionMode === 'SYNTHESIZED_PRIORITY'
-              ? (isAr ? 'أولوية للمبتكرة' : 'Innovative Priority')
-              : (isAr ? 'كافة الاستراتيجيات' : 'All Strategies')}
+          <span className="text-[10px] font-mono font-bold text-emerald-400 bg-emerald-950/70 border border-emerald-500/40 px-2 py-0.5 rounded">
+            {isAr ? `${enabledStrategiesCount} استراتيجية نشطة` : `${enabledStrategiesCount} Active Strategies`}
           </span>
         </div>
 
-        <div className="bg-[#120f24]/80 border border-purple-900/50 rounded-xl p-2.5 space-y-2 text-xs">
-          <div className="text-[11px] text-purple-200/80 font-medium">
+        <div className="bg-[#181a20] border border-[#2b2f36] rounded-xl p-3 space-y-2.5 text-xs">
+          <div className="text-[11px] text-[#eaecef] font-medium leading-relaxed">
             {isAr
-              ? 'اختر الاستراتيجيات التي يعتمد عليها البوت في فتح الصفقات:'
-              : 'Choose which strategies the bot trades with:'}
+              ? 'يقوم البوت بالتحليل الفني الدقيق بناءً على الاستراتيجيات الكلاسيكية المعتمدة: (EMA20/50/200, MACD, RSI, Bollinger Bands, Breakout, Scalping, SuperTrend)'
+              : 'The bot performs technical analysis based on classical strategies: (EMA20/50/200, MACD, RSI, Bollinger Bands, Breakout, Scalping, SuperTrend)'}
           </div>
 
-          <div className="grid grid-cols-1 gap-1.5">
-            <button
-              type="button"
-              onClick={() => onUpdateConfig({ strategyExecutionMode: 'SYNTHESIZED_ONLY' })}
-              className={`p-2 rounded-lg border text-start transition flex items-center justify-between ${
-                config.strategyExecutionMode === 'SYNTHESIZED_ONLY' || !config.strategyExecutionMode
-                  ? 'bg-purple-600/25 border-purple-400 text-purple-200 font-bold shadow-sm'
-                  : 'bg-[#181a20] border-[#2b2f36] text-[#848e9c] hover:text-[#eaecef]'
-              }`}
-            >
-              <div>
-                <div className="text-[11px] font-bold text-purple-300">
-                  {isAr ? '✨ الاستراتيجيات المبتكرة فقط (موصى به)' : '✨ Innovative / Synthesized Only (Active)'}
-                </div>
-                <div className="text-[9px] text-[#848e9c]">
-                  {isAr ? 'نفق شرودنغر، الهيدروديناميكا، الثرموديناميكا، والموجات الكهرومغناطيسية' : 'Quantum, Fluid dynamics, Thermodynamics & Wave mechanics'}
-                </div>
-              </div>
-              {config.strategyExecutionMode === 'SYNTHESIZED_ONLY' && (
-                <CheckCircle2 className="h-4 w-4 text-purple-400 shrink-0" />
-              )}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => onUpdateConfig({ strategyExecutionMode: 'SYNTHESIZED_PRIORITY' })}
-              className={`p-2 rounded-lg border text-start transition flex items-center justify-between ${
-                config.strategyExecutionMode === 'SYNTHESIZED_PRIORITY'
-                  ? 'bg-purple-600/25 border-purple-400 text-purple-200 font-bold shadow-sm'
-                  : 'bg-[#181a20] border-[#2b2f36] text-[#848e9c] hover:text-[#eaecef]'
-              }`}
-            >
-              <div>
-                <div className="text-[11px] font-bold">
-                  {isAr ? '⚖️ أولوية للاستراتيجيات المبتكرة' : '⚖️ Priority to Innovative'}
-                </div>
-                <div className="text-[9px] text-[#848e9c]">
-                  {isAr ? 'تقديم الاستراتيجيات المبتكرة مع دمج الاستراتيجيات الكلاسيكية كعامل مساعد' : 'Favor innovative models, use classic as secondary'}
-                </div>
-              </div>
-              {config.strategyExecutionMode === 'SYNTHESIZED_PRIORITY' && (
-                <CheckCircle2 className="h-4 w-4 text-purple-400 shrink-0" />
-              )}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => onUpdateConfig({ strategyExecutionMode: 'ALL_STRATEGIES' })}
-              className={`p-2 rounded-lg border text-start transition flex items-center justify-between ${
-                config.strategyExecutionMode === 'ALL_STRATEGIES'
-                  ? 'bg-purple-600/25 border-purple-400 text-purple-200 font-bold shadow-sm'
-                  : 'bg-[#181a20] border-[#2b2f36] text-[#848e9c] hover:text-[#eaecef]'
-              }`}
-            >
-              <div>
-                <div className="text-[11px] font-bold">
-                  {isAr ? '🌐 جميع الاستراتيجيات (المبتكرة + الكلاسيكية)' : '🌐 All Strategies Combined'}
-                </div>
-                <div className="text-[9px] text-[#848e9c]">
-                  {isAr ? 'إجماع شامل بين الـ 50+ استراتيجية كاملة' : 'Consensus across all 50+ strategies'}
-                </div>
-              </div>
-              {config.strategyExecutionMode === 'ALL_STRATEGIES' && (
-                <CheckCircle2 className="h-4 w-4 text-purple-400 shrink-0" />
-              )}
-            </button>
+          <div className="grid grid-cols-2 gap-1.5 text-[10px] font-mono text-[#848e9c]">
+            <div className="bg-[#121418] p-1.5 rounded border border-[#2b2f36] flex items-center gap-1">
+              <span className="text-emerald-400">✓</span>
+              <span>{isAr ? 'سكالبنج ومتوسطات' : 'Scalping & EMAs'}</span>
+            </div>
+            <div className="bg-[#121418] p-1.5 rounded border border-[#2b2f36] flex items-center gap-1">
+              <span className="text-emerald-400">✓</span>
+              <span>{isAr ? 'زخم وماكد (MACD)' : 'MACD & Momentum'}</span>
+            </div>
+            <div className="bg-[#121418] p-1.5 rounded border border-[#2b2f36] flex items-center gap-1">
+              <span className="text-emerald-400">✓</span>
+              <span>{isAr ? 'تشبع وقوة (RSI)' : 'RSI Oscillator'}</span>
+            </div>
+            <div className="bg-[#121418] p-1.5 rounded border border-[#2b2f36] flex items-center gap-1">
+              <span className="text-emerald-400">✓</span>
+              <span>{isAr ? 'بولينجر واختراق' : 'Bollinger & Breakout'}</span>
+            </div>
           </div>
 
-          {/* Instant Innovative Trade Scan Button */}
-          {onExecuteInstantInnovativeTrade && (
+          {/* Instant Natural Trade Scan Button */}
+          {onExecuteInstantNaturalTrade && (
             <button
-              id="btn-instant-innovative-trade"
+              id="btn-instant-natural-trade"
               type="button"
-              onClick={onExecuteInstantInnovativeTrade}
-              className="w-full mt-2 flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white py-2.5 px-3 rounded-lg text-xs font-bold transition shadow-md shadow-purple-900/30 font-mono active:scale-98"
+              onClick={onExecuteInstantNaturalTrade}
+              className="w-full mt-2 flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white py-2.5 px-3 rounded-lg text-xs font-bold transition shadow-md shadow-emerald-900/30 font-mono active:scale-98"
             >
-              <Zap className="h-4 w-4 text-yellow-300 fill-current animate-pulse" />
+              <Zap className="h-4 w-4 text-yellow-300 fill-current" />
               <span>
                 {isAr
-                  ? '⚡ فحص وتنفيذ صفقة مبتكرة الآن'
-                  : '⚡ Scan & Execute Innovative Trade Now'}
+                  ? '⚡ فحص وتحليل الصفقات بالاستراتيجيات الطبيعية الآن'
+                  : '⚡ Scan & Execute Natural Strategy Trade Now'}
               </span>
             </button>
           )}
