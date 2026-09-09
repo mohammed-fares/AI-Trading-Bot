@@ -463,14 +463,14 @@ export const ScientificStrategyLab: React.FC<ScientificStrategyLabProps> = ({
 
       {/* 4. Strategy Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
-        {filtered.map((strategy) => {
+        {filtered.map((strategy, idx) => {
           const domain = strategy.scientificDomain || 'QUANTUM';
           const domainColor = DOMAIN_COLORS[domain] || 'border-[#2b2f36] text-[#eaecef] bg-[#181a20]';
           const domainIcon = DOMAIN_ICONS[domain] || <Atom className="h-4 w-4" />;
 
           return (
             <div
-              key={strategy.id}
+              key={`${strategy.id}-${idx}`}
               className={`rounded-2xl border p-4 flex flex-col justify-between transition relative overflow-hidden shadow-lg ${
                 strategy.enabled
                   ? 'bg-[#181a20] border-[#2b2f36] hover:border-[#3b414d]'

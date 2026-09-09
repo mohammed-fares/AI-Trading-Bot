@@ -85,8 +85,8 @@ export const SystemLogsPanel: React.FC<SystemLogsPanelProps> = ({
         {logs.length === 0 ? (
           <div className="text-[#848e9c] text-center py-4">{t.logsWaiting}</div>
         ) : (
-          logs.map((log) => (
-            <div key={log.id} className="flex items-start gap-2 leading-relaxed">
+          logs.map((log, idx) => (
+            <div key={`${log.id}-${idx}`} className="flex items-start gap-2 leading-relaxed">
               <span className="text-[#848e9c] text-[10px] shrink-0">{log.time}</span>
               <span
                 className={`shrink-0 font-bold ${

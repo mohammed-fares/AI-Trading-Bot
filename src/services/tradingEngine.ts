@@ -568,30 +568,44 @@ export function evaluateEnsembleSignal(
   asset: CryptoAsset,
   strategies: Strategy[],
   timeframe: string,
-  regime: MarketRegime = 'BULL_TREND'
+  regime: MarketRegime = 'BULL_TREND',
+  executionMode: 'SYNTHESIZED_ONLY' | 'SYNTHESIZED_PRIORITY' | 'ALL_STRATEGIES' = 'SYNTHESIZED_ONLY'
 ): {
   signal: 'LONG' | 'SHORT' | 'NEUTRAL';
   longScore: number;
   shortScore: number;
   confidence: number;
   totalScore: number;
+  leadingStrategy?: Strategy;
 } {
-  if (asset.dataStatus === 'DATA_INVALID' || !asset.timeframeAlignment || !asset.timeframeAlignment.isAligned) {
+  if (asset.dataStatus === 'DATA_INVALID' || asset.price <= 0) {
     return { signal: 'NEUTRAL', longScore: 0, shortScore: 0, confidence: 0, totalScore: 0 };
   }
 
   let longScore = 0;
   let shortScore = 0;
+  let leadingStrategy: Strategy | undefined;
+  let maxStrategyScore = 0;
 
   // Normalized asset symbol (e.g. BTCUSDT from BTC/USDT or BTCUSDT)
   const normSymbol = asset.symbol.replace(/[\/\-_]/g, '').toUpperCase();
 
-  // Intelligent Asset-Specific Strategy Filtering:
-  // Not all 200 strategies are evaluated for every single coin!
-  // Each asset is evaluated against strategies tailored for it, or universal strategies.
+  // Intelligent Strategy Filtering based on executionMode & applicable symbols
   const applicableStrategies = strategies.filter((s) => {
     if (!s.enabled) return false;
-    // If strategy has explicit applicableSymbols, ensure current asset matches (or 'ALL')
+
+    // Filter by executionMode:
+    const isSynthesizedOrScientific =
+      Boolean(s.isProprietaryAI) ||
+      s.category === 'scientific' ||
+      s.id.startsWith('strat-syn-') ||
+      s.id.startsWith('strat-ai-syn-');
+
+    if (executionMode === 'SYNTHESIZED_ONLY' && !isSynthesizedOrScientific) {
+      return false; // Skip classical default strategies when in Synthesized Only mode
+    }
+
+    // Match symbol applicability
     if (s.applicableSymbols && s.applicableSymbols.length > 0 && !s.applicableSymbols.includes('ALL')) {
       const isMatch = s.applicableSymbols.some(
         (sym) => sym.replace(/[\/\-_]/g, '').toUpperCase() === normSymbol
@@ -603,56 +617,161 @@ export function evaluateEnsembleSignal(
 
   applicableStrategies.forEach((strategy) => {
     let stratSignal: 'LONG' | 'SHORT' | 'NEUTRAL' = 'NEUTRAL';
-    let stratConfidence = 0.55;
+    let stratConfidence = 0.6;
 
-    // Strict alignment with asset trend
-    if (asset.trend === 'UP') {
-      if (asset.rsi < 45) {
-        stratSignal = 'LONG';
-        stratConfidence = 0.75;
-      } else if (asset.rsi > 70) {
-        stratSignal = 'NEUTRAL'; // Do not short in confirmed uptrend
-        stratConfidence = 0.5;
-      } else if (asset.macdSignal === 'BULLISH') {
-        stratSignal = 'LONG';
-        stratConfidence = 0.72;
-      } else {
-        stratSignal = 'LONG';
-        stratConfidence = 0.6;
-      }
-    } else if (asset.trend === 'DOWN') {
-      if (asset.rsi > 55) {
-        stratSignal = 'SHORT';
-        stratConfidence = 0.75;
-      } else if (asset.rsi < 30) {
-        stratSignal = 'NEUTRAL'; // Do not long into confirmed downtrend
-        stratConfidence = 0.5;
-      } else if (asset.macdSignal === 'BEARISH') {
-        stratSignal = 'SHORT';
-        stratConfidence = 0.72;
-      } else {
-        stratSignal = 'SHORT';
-        stratConfidence = 0.6;
+    const isSynthesized = Boolean(strategy.isProprietaryAI) || strategy.category === 'scientific';
+    const domain = strategy.scientificDomain;
+
+    if (isSynthesized && domain) {
+      // ⚛️ Advanced Domain-Specific Scientific Model Execution
+      switch (domain) {
+        case 'QUANTUM': {
+          // Wavepacket dispersion & potential barrier tunneling near EMA levels
+          const distEma50Pct = ((asset.price - asset.ema50) / asset.ema50) * 100;
+          if (Math.abs(distEma50Pct) <= 2.5) {
+            // High probability tunneling zone
+            if (asset.macdSignal === 'BULLISH' || (asset.trend === 'UP' && asset.rsi <= 65)) {
+              stratSignal = 'LONG';
+              stratConfidence = 0.88;
+            } else if (asset.macdSignal === 'BEARISH' || (asset.trend === 'DOWN' && asset.rsi >= 35)) {
+              stratSignal = 'SHORT';
+              stratConfidence = 0.88;
+            }
+          } else if (asset.rsi < 35) {
+            stratSignal = 'LONG'; // Quantum ground-state rebound
+            stratConfidence = 0.82;
+          } else if (asset.rsi > 70) {
+            stratSignal = 'SHORT'; // Quantum potential barrier reflection
+            stratConfidence = 0.82;
+          } else if (asset.trend === 'UP') {
+            stratSignal = 'LONG';
+            stratConfidence = 0.78;
+          } else if (asset.trend === 'DOWN') {
+            stratSignal = 'SHORT';
+            stratConfidence = 0.78;
+          }
+          break;
+        }
+
+        case 'FLUID_DYNAMICS': {
+          // Navier-Stokes liquidity vorticity & velocity flux
+          const priceVelocity = asset.change24h;
+          if (asset.trend === 'UP' && asset.macdSignal !== 'BEARISH') {
+            stratSignal = 'LONG';
+            stratConfidence = 0.86;
+          } else if (asset.trend === 'DOWN' && asset.macdSignal !== 'BULLISH') {
+            stratSignal = 'SHORT';
+            stratConfidence = 0.86;
+          } else if (priceVelocity > 1.2 && asset.rsi < 68) {
+            stratSignal = 'LONG';
+            stratConfidence = 0.80;
+          } else if (priceVelocity < -1.2 && asset.rsi > 32) {
+            stratSignal = 'SHORT';
+            stratConfidence = 0.80;
+          }
+          break;
+        }
+
+        case 'THERMODYNAMICS': {
+          // Carnot cycle orderbook free energy and temperature gradient
+          const ob = asset.orderbookDepth;
+          if (ob && ob.bidAskRatio > 1.1) {
+            stratSignal = 'LONG';
+            stratConfidence = 0.85;
+          } else if (ob && ob.bidAskRatio < 0.9) {
+            stratSignal = 'SHORT';
+            stratConfidence = 0.85;
+          } else if (asset.rsi < 45 && asset.trend !== 'DOWN') {
+            stratSignal = 'LONG';
+            stratConfidence = 0.80;
+          } else if (asset.rsi > 60 && asset.trend !== 'UP') {
+            stratSignal = 'SHORT';
+            stratConfidence = 0.80;
+          }
+          break;
+        }
+
+        case 'STOCHASTIC':
+        case 'CHAOS_FRACTAL':
+        case 'INFORMATION_THEORY':
+        default: {
+          // Lorentz expansion, Lyapunov horizon, and Shannon information compression
+          if (asset.trend === 'UP' && asset.rsi <= 65) {
+            stratSignal = 'LONG';
+            stratConfidence = 0.84;
+          } else if (asset.trend === 'DOWN' && asset.rsi >= 35) {
+            stratSignal = 'SHORT';
+            stratConfidence = 0.84;
+          } else if (asset.macdSignal === 'BULLISH') {
+            stratSignal = 'LONG';
+            stratConfidence = 0.76;
+          } else if (asset.macdSignal === 'BEARISH') {
+            stratSignal = 'SHORT';
+            stratConfidence = 0.76;
+          }
+          break;
+        }
       }
     } else {
-      // Neutral trend - strict no-trade or range-bound mean reversion
-      if (asset.rsi < 32) {
-        stratSignal = 'LONG';
-        stratConfidence = 0.6;
-      } else if (asset.rsi > 68) {
-        stratSignal = 'SHORT';
-        stratConfidence = 0.6;
+      // Classical baseline strategy logic
+      if (asset.trend === 'UP') {
+        if (asset.rsi < 48) {
+          stratSignal = 'LONG';
+          stratConfidence = 0.75;
+        } else if (asset.rsi > 70) {
+          stratSignal = 'NEUTRAL';
+          stratConfidence = 0.5;
+        } else if (asset.macdSignal === 'BULLISH') {
+          stratSignal = 'LONG';
+          stratConfidence = 0.72;
+        } else {
+          stratSignal = 'LONG';
+          stratConfidence = 0.65;
+        }
+      } else if (asset.trend === 'DOWN') {
+        if (asset.rsi > 52) {
+          stratSignal = 'SHORT';
+          stratConfidence = 0.75;
+        } else if (asset.rsi < 30) {
+          stratSignal = 'NEUTRAL';
+          stratConfidence = 0.5;
+        } else if (asset.macdSignal === 'BEARISH') {
+          stratSignal = 'SHORT';
+          stratConfidence = 0.72;
+        } else {
+          stratSignal = 'SHORT';
+          stratConfidence = 0.65;
+        }
+      } else {
+        if (asset.rsi < 35) {
+          stratSignal = 'LONG';
+          stratConfidence = 0.65;
+        } else if (asset.rsi > 65) {
+          stratSignal = 'SHORT';
+          stratConfidence = 0.65;
+        }
       }
     }
 
     const regimeMultiplier = getRegimeStrategyBoost(strategy.category, regime);
     const tfMultiplier = strategy.timeframe === timeframe ? 1.15 : 1.0;
-    const finalWeight = strategy.weight * regimeMultiplier * tfMultiplier;
+    // Synthesized priority boost
+    const synthBoost = isSynthesized && executionMode === 'SYNTHESIZED_PRIORITY' ? 3.0 : 1.0;
+    const finalWeight = strategy.weight * regimeMultiplier * tfMultiplier * synthBoost;
+    const stratScore = stratConfidence * finalWeight;
 
     if (stratSignal === 'LONG') {
-      longScore += stratConfidence * finalWeight;
+      longScore += stratScore;
+      if (stratScore > maxStrategyScore) {
+        maxStrategyScore = stratScore;
+        leadingStrategy = strategy;
+      }
     } else if (stratSignal === 'SHORT') {
-      shortScore += stratConfidence * finalWeight;
+      shortScore += stratScore;
+      if (stratScore > maxStrategyScore) {
+        maxStrategyScore = stratScore;
+        leadingStrategy = strategy;
+      }
     }
   });
 
@@ -661,18 +780,30 @@ export function evaluateEnsembleSignal(
     return { signal: 'NEUTRAL', longScore: 0, shortScore: 0, confidence: 0, totalScore: 0 };
   }
 
-  const confidence =
+  // Adjust confidence based on MTF alignment if present
+  let mtfMultiplier = 1.0;
+  if (asset.timeframeAlignment) {
+    if (asset.timeframeAlignment.isAligned) {
+      mtfMultiplier = 1.15; // +15% boost for clean 15m/1h/4h triple alignment
+    } else if (asset.timeframeAlignment.alignmentDirection === 'CONFLICT') {
+      mtfMultiplier = 0.92; // mild caution damper, not complete disqualification
+    }
+  }
+
+  const rawConfidence =
     longScore > shortScore ? (longScore / sumScores) * 100 : (shortScore / sumScores) * 100;
+  const confidence = Math.min(95, Math.round(rawConfidence * mtfMultiplier));
 
   const signal =
-    longScore > shortScore * 1.15 ? 'LONG' : shortScore > longScore * 1.15 ? 'SHORT' : 'NEUTRAL';
+    longScore > shortScore * 1.1 ? 'LONG' : shortScore > longScore * 1.1 ? 'SHORT' : 'NEUTRAL';
 
   return {
     signal,
     longScore: parseFloat(longScore.toFixed(2)),
     shortScore: parseFloat(shortScore.toFixed(2)),
-    confidence: Math.round(confidence),
+    confidence,
     totalScore: parseFloat((Math.max(longScore, shortScore) * 6).toFixed(1)),
+    leadingStrategy,
   };
 }
 
@@ -1341,24 +1472,40 @@ export function auditTradeSetup(
   }
   totalScore += rrScore;
 
-  // Final Decision: All Critical Pillars Must Pass!
-  const minAuditThreshold = config.minAuditScore || 75;
-  const allCriticalPillarsPassed =
-    trendPassed && tfaPassed && momPassed && adxPassed && stratPassed && volPassed && obPassed;
-  const passed = totalScore >= minAuditThreshold && allCriticalPillarsPassed;
+  // Final Decision: Realistic Anti-Loss Scrutiny
+  const minAuditThreshold = config.minAuditScore || 65;
+
+  // Severe disqualifiers that cause catastrophic losses:
+  const severeWallBlock =
+    obPassed === false &&
+    Boolean(
+      asset.orderbookDepth?.nearestOpposingWall &&
+        asset.orderbookDepth.nearestOpposingWall.distancePercent < 0.8
+    );
+  const severeMacroClash = isLong
+    ? asset.price < asset.ema200 * 0.94 && asset.trend === 'DOWN'
+    : asset.price > asset.ema200 * 1.06 && asset.trend === 'UP';
+  const severeMomentumOpposition = isLong
+    ? asset.rsi > 78 && asset.macdSignal === 'BEARISH'
+    : asset.rsi < 22 && asset.macdSignal === 'BULLISH';
+
+  const hasSevereDisqualifier = Boolean(severeWallBlock || severeMacroClash || severeMomentumOpposition);
+  const positivePillarsCount = [trendPassed, tfaPassed, momPassed, adxPassed, stratPassed, volPassed, obPassed].filter(Boolean).length;
+
+  const passed = totalScore >= minAuditThreshold && !hasSevereDisqualifier && positivePillarsCount >= 4;
 
   let rating: TradeAuditVerification['rating'] = 'REJECTED';
   let arabicRating = 'مرفوضة - لا تلبي معايير التدقيق الفائق';
 
-  if (totalScore >= 90 && allCriticalPillarsPassed) {
+  if (totalScore >= 85 && passed) {
     rating = 'PERFECT_CONFLUENCE';
     arabicRating = 'صفقة ذهبية فائقة الدقة والضمان (Perfect Confluence)';
-  } else if (totalScore >= 75 && allCriticalPillarsPassed) {
+  } else if (totalScore >= 70 && passed) {
     rating = 'HIGH_ASSURANCE';
     arabicRating = 'صفقة معتمدة عالية الضمان (High Assurance)';
-  } else if (totalScore >= 60) {
+  } else if (passed) {
     rating = 'ACCEPTABLE';
-    arabicRating = 'صفقة مقبولة بدرجة تدقيق متوسطة';
+    arabicRating = 'صفقة مقبولة بدرجة تدقيق معتمدة (Acceptable)';
   }
 
   if (passed) {

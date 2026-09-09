@@ -60,14 +60,15 @@ export const ActiveTradesPanel: React.FC<ActiveTradesPanelProps> = ({ trades, on
               </tr>
             </thead>
             <tbody className="divide-y divide-[#2b2f36]/60">
-              {trades.map((trade) => {
+              {trades.map((trade, idx) => {
                 const isLong = trade.side === 'LONG';
                 const isProfit = trade.pnl >= 0;
                 const elapsedMin = ((Date.now() - trade.openedAt) / (1000 * 60)).toFixed(1);
                 const auditScore = trade.auditScore ?? (trade.confidence >= 70 ? 88 : 78);
+                const rowKey = trade.id ? `${trade.id}-${idx}` : `tr-active-${idx}`;
 
                 return (
-                  <tr key={trade.id} className="hover:bg-[#1e2329]/50 transition font-mono">
+                  <tr key={rowKey} className="hover:bg-[#1e2329]/50 transition font-mono">
                     {/* Symbol & Side */}
                     <td className="py-2.5 pr-2">
                       <div className="flex items-center gap-2">
@@ -82,7 +83,15 @@ export const ActiveTradesPanel: React.FC<ActiveTradesPanelProps> = ({ trades, on
                         </span>
                         <div>
                           <span className="font-bold text-[#eaecef] text-xs">{trade.symbol}</span>
-                          <div className="text-[10px] text-[#848e9c]">
+                          {trade.strategyUsed && (
+                            <div
+                              className="text-[10px] text-purple-300 font-sans font-medium truncate max-w-[130px] sm:max-w-[160px]"
+                              title={trade.strategyUsed}
+                            >
+                              ⚡ {trade.strategyUsed}
+                            </div>
+                          )}
+                          <div className="text-[9px] text-[#848e9c]">
                             {trade.leverage}x | {trade.confidence}%
                           </div>
                         </div>

@@ -14,6 +14,8 @@ import {
   Trash2,
   CheckCircle2,
   ShieldCheck,
+  Zap,
+  Atom,
 } from 'lucide-react';
 import {
   AdaptiveConfidenceState,
@@ -41,6 +43,7 @@ interface ControlPanelProps {
   onOpenStrategies: () => void;
   onPurgeDatabase?: () => void;
   onOpenDatabase?: () => void;
+  onExecuteInstantInnovativeTrade?: () => void;
 }
 
 export const ControlPanel: React.FC<ControlPanelProps> = ({
@@ -60,6 +63,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
   onOpenStrategies,
   onPurgeDatabase,
   onOpenDatabase,
+  onExecuteInstantInnovativeTrade,
 }) => {
   const { t, isAr } = useLanguage();
   const [editingBalance, setEditingBalance] = useState(false);
@@ -309,8 +313,8 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
                 <span>{isAr ? 'الحد الأدنى لدرجة الجودة:' : 'Min Quality Score:'}</span>
                 <span className="text-emerald-400 font-bold">{config.minAuditScore}%</span>
               </div>
-              <div className="grid grid-cols-4 gap-1 text-[10px] font-mono">
-                {[70, 75, 80, 85].map((score) => (
+              <div className="grid grid-cols-5 gap-1 text-[10px] font-mono">
+                {[55, 60, 65, 70, 75].map((score) => (
                   <button
                     key={score}
                     type="button"
@@ -327,8 +331,8 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
               </div>
               <p className="text-[10px] text-[#848e9c] leading-tight">
                 {isAr
-                  ? 'يتم فحص (الاتجاه، الزخم، ADX، التذبذب، إجماع 50+ استراتيجية، وR:R) بدقة متناهية.'
-                  : 'Checks Trend, Momentum, ADX, Volatility, 50+ Strategies & R:R.'}
+                  ? 'يتم فحص (الاتجاه، الزخم، ADX، التذبذب، إجماع الاستراتيجيات، وR:R) بدقة متناهية.'
+                  : 'Checks Trend, Momentum, ADX, Volatility, Strategy consensus & R:R.'}
               </p>
             </div>
           )}
@@ -371,12 +375,122 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
         )}
       </div>
 
+      {/* Innovative Strategies Engine & Execution Mode */}
+      <div className="space-y-2.5 pt-2 border-t border-[#2b2f36]">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-bold uppercase tracking-wider text-purple-300 flex items-center gap-1.5">
+            <Atom className="h-4 w-4 text-purple-400" />
+            <span>{isAr ? 'محرك الاستراتيجيات المبتكرة' : 'Innovative Strategies Engine'}</span>
+          </span>
+          <span className="text-[10px] font-mono font-bold text-purple-300 bg-purple-950/70 border border-purple-500/40 px-2 py-0.5 rounded">
+            {config.strategyExecutionMode === 'SYNTHESIZED_ONLY'
+              ? (isAr ? '⚡ مبتكرة حصراً' : '⚡ Innovative Only')
+              : config.strategyExecutionMode === 'SYNTHESIZED_PRIORITY'
+              ? (isAr ? 'أولوية للمبتكرة' : 'Innovative Priority')
+              : (isAr ? 'كافة الاستراتيجيات' : 'All Strategies')}
+          </span>
+        </div>
+
+        <div className="bg-[#120f24]/80 border border-purple-900/50 rounded-xl p-2.5 space-y-2 text-xs">
+          <div className="text-[11px] text-purple-200/80 font-medium">
+            {isAr
+              ? 'اختر الاستراتيجيات التي يعتمد عليها البوت في فتح الصفقات:'
+              : 'Choose which strategies the bot trades with:'}
+          </div>
+
+          <div className="grid grid-cols-1 gap-1.5">
+            <button
+              type="button"
+              onClick={() => onUpdateConfig({ strategyExecutionMode: 'SYNTHESIZED_ONLY' })}
+              className={`p-2 rounded-lg border text-start transition flex items-center justify-between ${
+                config.strategyExecutionMode === 'SYNTHESIZED_ONLY' || !config.strategyExecutionMode
+                  ? 'bg-purple-600/25 border-purple-400 text-purple-200 font-bold shadow-sm'
+                  : 'bg-[#181a20] border-[#2b2f36] text-[#848e9c] hover:text-[#eaecef]'
+              }`}
+            >
+              <div>
+                <div className="text-[11px] font-bold text-purple-300">
+                  {isAr ? '✨ الاستراتيجيات المبتكرة فقط (موصى به)' : '✨ Innovative / Synthesized Only (Active)'}
+                </div>
+                <div className="text-[9px] text-[#848e9c]">
+                  {isAr ? 'نفق شرودنغر، الهيدروديناميكا، الثرموديناميكا، والموجات الكهرومغناطيسية' : 'Quantum, Fluid dynamics, Thermodynamics & Wave mechanics'}
+                </div>
+              </div>
+              {config.strategyExecutionMode === 'SYNTHESIZED_ONLY' && (
+                <CheckCircle2 className="h-4 w-4 text-purple-400 shrink-0" />
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onUpdateConfig({ strategyExecutionMode: 'SYNTHESIZED_PRIORITY' })}
+              className={`p-2 rounded-lg border text-start transition flex items-center justify-between ${
+                config.strategyExecutionMode === 'SYNTHESIZED_PRIORITY'
+                  ? 'bg-purple-600/25 border-purple-400 text-purple-200 font-bold shadow-sm'
+                  : 'bg-[#181a20] border-[#2b2f36] text-[#848e9c] hover:text-[#eaecef]'
+              }`}
+            >
+              <div>
+                <div className="text-[11px] font-bold">
+                  {isAr ? '⚖️ أولوية للاستراتيجيات المبتكرة' : '⚖️ Priority to Innovative'}
+                </div>
+                <div className="text-[9px] text-[#848e9c]">
+                  {isAr ? 'تقديم الاستراتيجيات المبتكرة مع دمج الاستراتيجيات الكلاسيكية كعامل مساعد' : 'Favor innovative models, use classic as secondary'}
+                </div>
+              </div>
+              {config.strategyExecutionMode === 'SYNTHESIZED_PRIORITY' && (
+                <CheckCircle2 className="h-4 w-4 text-purple-400 shrink-0" />
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onUpdateConfig({ strategyExecutionMode: 'ALL_STRATEGIES' })}
+              className={`p-2 rounded-lg border text-start transition flex items-center justify-between ${
+                config.strategyExecutionMode === 'ALL_STRATEGIES'
+                  ? 'bg-purple-600/25 border-purple-400 text-purple-200 font-bold shadow-sm'
+                  : 'bg-[#181a20] border-[#2b2f36] text-[#848e9c] hover:text-[#eaecef]'
+              }`}
+            >
+              <div>
+                <div className="text-[11px] font-bold">
+                  {isAr ? '🌐 جميع الاستراتيجيات (المبتكرة + الكلاسيكية)' : '🌐 All Strategies Combined'}
+                </div>
+                <div className="text-[9px] text-[#848e9c]">
+                  {isAr ? 'إجماع شامل بين الـ 50+ استراتيجية كاملة' : 'Consensus across all 50+ strategies'}
+                </div>
+              </div>
+              {config.strategyExecutionMode === 'ALL_STRATEGIES' && (
+                <CheckCircle2 className="h-4 w-4 text-purple-400 shrink-0" />
+              )}
+            </button>
+          </div>
+
+          {/* Instant Innovative Trade Scan Button */}
+          {onExecuteInstantInnovativeTrade && (
+            <button
+              id="btn-instant-innovative-trade"
+              type="button"
+              onClick={onExecuteInstantInnovativeTrade}
+              className="w-full mt-2 flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white py-2.5 px-3 rounded-lg text-xs font-bold transition shadow-md shadow-purple-900/30 font-mono active:scale-98"
+            >
+              <Zap className="h-4 w-4 text-yellow-300 fill-current animate-pulse" />
+              <span>
+                {isAr
+                  ? '⚡ فحص وتنفيذ صفقة مبتكرة الآن'
+                  : '⚡ Scan & Execute Innovative Trade Now'}
+              </span>
+            </button>
+          )}
+        </div>
+      </div>
+
       {/* Strategies Summary */}
       <div className="space-y-2 pt-2 border-t border-[#2b2f36]">
         <div className="flex items-center justify-between">
           <span className="text-xs font-bold uppercase tracking-wider text-[#848e9c] flex items-center gap-1.5">
             <Cpu className="h-3.5 w-3.5 text-[#fcd535]" />
-            <span>{isAr ? 'الاستراتيجيات' : 'Strategies'}</span>
+            <span>{isAr ? 'الاستراتيجيات العامة' : 'All Strategies'}</span>
           </span>
           <span className="text-[10px] font-mono text-[#fcd535] bg-[#fcd535]/10 border border-[#fcd535]/30 px-1.5 py-0.5 rounded">
             {enabledStrategiesCount} / {totalStrategiesCount}

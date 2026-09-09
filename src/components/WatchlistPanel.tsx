@@ -194,6 +194,18 @@ export const WatchlistPanel: React.FC<WatchlistPanelProps> = ({
                   </span>
                 </div>
 
+                {/* Leading Innovative Strategy */}
+                {asset.leadingStrategy && (
+                  <div className="text-[10px] text-purple-300 font-sans truncate mb-1.5 flex items-center gap-1">
+                    <span className="text-[9px] px-1 py-0.2 rounded bg-purple-950/80 border border-purple-700/50 text-purple-200 font-mono shrink-0">
+                      {isAr ? 'مبتكرة' : 'AI Syn'}
+                    </span>
+                    <span className="truncate text-purple-200/90 font-medium" title={asset.leadingStrategy.arabicName || asset.leadingStrategy.name}>
+                      {isAr ? (asset.leadingStrategy.arabicName || asset.leadingStrategy.name) : asset.leadingStrategy.name}
+                    </span>
+                  </div>
+                )}
+
                 {/* Long vs Short score bar */}
                 <div className="flex items-center gap-1.5 text-[10px] text-[#848e9c] mb-2 font-mono">
                   <span className="text-emerald-400">L: {asset.longScore}</span>

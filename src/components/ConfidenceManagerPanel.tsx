@@ -128,8 +128,8 @@ export const ConfidenceManagerPanel: React.FC<ConfidenceManagerPanelProps> = ({
             <span>TOTAL: {confidenceState.totalAdjustments}</span>
           </div>
           <div className="space-y-1 max-h-24 overflow-y-auto">
-            {confidenceState.history.slice(-4).map((entry) => (
-              <div key={entry.id} className="flex items-center justify-between">
+            {confidenceState.history.slice(-4).map((entry, idx) => (
+              <div key={`${entry.id}-${idx}`} className="flex items-center justify-between">
                 <span className={entry.type === 'UP' ? 'text-emerald-400' : 'text-red-400'}>
                   {entry.type === 'UP' ? '▲' : '▼'} {entry.reason} (
                   {entry.change > 0 ? `+${entry.change}%` : `${entry.change}%`})

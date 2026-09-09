@@ -270,11 +270,12 @@ export const AdaptiveAIPanel: React.FC<AdaptiveAIPanelProps> = ({
             </div>
           ) : (
             <div className="space-y-2 max-h-[350px] overflow-y-auto pr-1">
-              {learnedLessons.map((lesson) => {
+              {learnedLessons.map((lesson, idx) => {
                 const isPositive = lesson.pnl > 0;
+                const lessonKey = lesson.id ? `${lesson.id}-${idx}` : `lesson-${idx}`;
                 return (
                   <div
-                    key={lesson.id}
+                    key={lessonKey}
                     className={`p-3 rounded-xl border text-xs font-mono transition ${
                       isPositive
                         ? 'bg-emerald-500/5 border-emerald-500/30'

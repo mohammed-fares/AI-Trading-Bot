@@ -64,12 +64,13 @@ export const TradeHistoryPanel: React.FC<TradeHistoryPanelProps> = ({ closedTrad
               </tr>
             </thead>
             <tbody className="divide-y divide-[#2b2f36]/60 font-mono">
-              {closedTrades.map((trade) => {
+              {closedTrades.map((trade, idx) => {
                 const isProfit = trade.pnl >= 0;
                 const exitInfo = getExitReasonLabel(trade.exitReason);
+                const rowKey = trade.id ? `${trade.id}-${idx}` : `tr-hist-${idx}`;
 
                 return (
-                  <tr key={trade.id} className="hover:bg-[#1e2329]/50 transition">
+                  <tr key={rowKey} className="hover:bg-[#1e2329]/50 transition">
                     {/* Symbol & Side */}
                     <td className="py-2.5 pr-2">
                       <div className="flex items-center gap-2">

@@ -178,9 +178,9 @@ export const StrategyManagerModal: React.FC<StrategyManagerModalProps> = ({
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {filteredStrategies.map((strat) => (
+              {filteredStrategies.map((strat, idx) => (
                 <div
-                  key={strat.id}
+                  key={`${strat.id}-${idx}`}
                   className={`border rounded-lg p-3.5 transition-all ${
                     strat.enabled
                       ? 'bg-[#1e2329] border-[#2b2f36] hover:border-[#fcd535]/60 shadow-sm'

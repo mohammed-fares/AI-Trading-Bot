@@ -245,6 +245,8 @@ export interface CryptoAsset {
   auditVerification?: TradeAuditVerification;
   // Time-Frame Alignment (15m, 1h, 4h)
   timeframeAlignment?: TimeFrameAlignment;
+  // Leading Strategy driving this signal
+  leadingStrategy?: Strategy;
   // Binance Orderbook Depth & Liquidity Walls
   orderbookDepth?: OrderbookDepthAnalysis;
   // Smart Freeze state
@@ -326,6 +328,8 @@ export interface BotConfig {
   binanceApiSecret: string;
   binanceNetwork: 'TESTNET' | 'PRODUCTION';
   pureSelfLearning: boolean;
+  // Strategy Execution Focus (Synthesized AI vs All)
+  strategyExecutionMode?: 'SYNTHESIZED_ONLY' | 'SYNTHESIZED_PRIORITY' | 'ALL_STRATEGIES';
   // High-Precision Trade Verification & Scrutiny
   precisionAuditMode: boolean;
   minAuditScore: number; // default: 75%
