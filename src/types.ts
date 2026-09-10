@@ -9,8 +9,29 @@ export type ExitReason =
   | 'BREAK_EVEN'
   | 'TIME_EXIT'
   | 'PROFIT_RETRACEMENT'
+  | 'SMART_EXIT'
   | 'CIRCUIT_BREAKER'
   | 'MANUAL';
+
+export interface SmartExitStatus {
+  isActive: boolean;
+  isTriggered: boolean;
+  peakPnlPercent: number;
+  currentPnlPercent: number;
+  currentRetracePct: number;
+  dropRatio: number; // e.g. 0.25 (25%)
+  triggerPnlPercent: number;
+  triggerPrice: number;
+  peakPrice: number;
+  entryPrice: number;
+  currentPrice: number;
+  pnlUSD: number;
+  details: string;
+  arabicDetails: string;
+  trendFactor: string;
+  volatilityFactor: string;
+  momentumFactor: string;
+}
 
 export type MarketTrend = 'UP' | 'DOWN' | 'NEUTRAL';
 
@@ -253,6 +274,8 @@ export interface CryptoAsset {
   orderbookDepth?: OrderbookDepthAnalysis;
   // Smart Freeze state
   smartFreeze?: SmartFreezeInfo;
+  // Gemini AI Decision Engine analysis
+  geminiDecision?: GeminiDecisionResult;
   // Market Data Validity
   dataStatus?: 'VALID' | 'DATA_INVALID' | 'PENDING';
   lastDataError?: string;
@@ -273,6 +296,7 @@ export interface Trade {
   pnl: number;
   pnlPercent: number;
   peakPnlPercent?: number;
+  targetProfitUSD?: number; // Target $20 profit per trade
   stopLoss: number;
   takeProfit: number;
   trailingStopActive?: boolean;
@@ -283,16 +307,22 @@ export interface Trade {
   confidence: number;
   auditScore?: number;
   auditVerification?: TradeAuditVerification;
+  geminiDecision?: GeminiDecisionResult;
   openedAt: number; // timestamp
   closedAt?: number;
   closePrice?: number;
   exitReason?: ExitReason | null;
+  smartExitStatus?: SmartExitStatus;
 }
 
 export interface BotConfig {
   balance: number;
   initialBalance: number;
   peakBalance: number;
+  // Strict Target Profit per Trade ($20 USD)
+  targetProfitPerTradeUSD: number; // default $20.00
+  geminiAiEngineEnabled: boolean; // default true
+  geminiMinConfidence: number; // default 70%
   // Risk settings
   maxDailyRisk: number; // e.g. 2.0%
   maxTradeRisk: number; // e.g. 0.3%
@@ -317,6 +347,16 @@ export interface BotConfig {
   timeExitMinProfit: number; // 0.3%
   profitRetraceThreshold: number; // 2.0% profit
   profitRetraceDropRatio: number; // retraces 40% (0.4)
+  // Adaptive Smart Exit (Phase 1: Dynamic Market-Adaptive Pullback)
+  smartExitEnabled: boolean; // Enable/disable adaptive smart exit
+  smartExitMinProfitPercent: number; // Min profit before activation (default 5.0%)
+  smartExitMinDropRatio: number; // Min allowed drop ratio (default 10.0%)
+  smartExitMaxDropRatio: number; // Max allowed drop ratio (default 35.0%)
+  smartExitSeparateTrendRatios: boolean; // Separate drop ratio for UP vs DOWN trend
+  smartExitUptrendDropRatio: number; // Drop ratio in strong UP trend (default 25.0%)
+  smartExitDowntrendDropRatio: number; // Drop ratio in DOWN trend (default 15.0%)
+  smartExitUseAIMomentum: boolean; // Use AI / Momentum to dynamically expand/contract ratio
+  smartExitVolatilityWindowMin: number; // Volatility measurement window in minutes (default 15)
   // Circuit breaker
   maxConsecutiveLosses: number; // 5
   circuitBreakerCooldownMin: number; // 30 min
@@ -352,6 +392,145 @@ export interface BotConfig {
   smartFreezeEnabled: boolean; // Suspends trading on pairs with abnormal 15m volatility
   smartFreezeThresholdPercent: number; // 15m price swing threshold (e.g. 2.8%)
   smartFreezeDurationMinutes: number; // Freeze duration (e.g. 15 min)
+}
+
+// ==========================================
+// GEMINI AI DECISION ENGINE STRUCTURES
+// ==========================================
+
+export interface CandleSnapshot {
+  openTime: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+export interface MarketSnapshot {
+  symbol: string;
+  currentPrice: number;
+  timeframe: string;
+  candles: CandleSnapshot[];
+  indicators: {
+    ema20: number;
+    ema50: number;
+    ema200: number;
+    rsi: number;
+    macdSignal: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
+    adx: number;
+    atr?: number;
+    priceVsEma200Percent: number;
+  };
+  trend: MarketTrend;
+  marketRegime: MarketRegime;
+  multiTimeframe: {
+    tf15mTrend: MarketTrend;
+    tf1hTrend: MarketTrend;
+    tf4hTrend: MarketTrend;
+    isAligned: boolean;
+    alignmentDirection: 'LONG' | 'SHORT' | 'CONFLICT' | 'NEUTRAL';
+  };
+  orderbook: {
+    bidVolume: number;
+    askVolume: number;
+    bidAskRatio: number;
+    depthStatus: string;
+    hasOpposingWall: boolean;
+    nearestWallDistancePct?: number;
+    nearestWallType?: string;
+  };
+  supportResistance: {
+    support: number;
+    resistance: number;
+    pivot: number;
+  };
+  volatility: number;
+  volume24h?: number;
+  strategyResults: {
+    longScore: number;
+    shortScore: number;
+    consensusRatio: number;
+    dominantSide: 'LONG' | 'SHORT' | 'NEUTRAL';
+    leadingStrategyName?: string;
+    evaluatedCount: number;
+  };
+  riskParameters: {
+    targetProfitUSD: number; // strictly $20.00
+    accountBalance: number;
+    leverage: number;
+    stopLossPercent: number;
+    takeProfitPercent: number;
+  };
+}
+
+export interface GeminiDecisionResult {
+  symbol: string;
+  signal: 'LONG' | 'SHORT' | 'NEUTRAL';
+  confidence: number; // 0 to 100
+  reasoningEn: string;
+  reasoningAr: string;
+  keyRisksEn: string[];
+  keyRisksAr: string[];
+  confirmationFactorsEn: string[];
+  confirmationFactorsAr: string[];
+  targetProfitUSD: number; // 20
+  recommendedEntry: number;
+  stopLoss: number;
+  takeProfit: number;
+  riskRewardRatio: number;
+  suggestedStrategyAdjustment?: string;
+  isApproved: boolean;
+  rejectionReason?: string;
+  timestamp: number;
+  source: 'GEMINI_AI' | 'CONSENSUS_ENGINE_FALLBACK';
+}
+
+// ==========================================
+// BACKTESTING ENGINE STRUCTURES
+// ==========================================
+
+export interface BacktestConfig {
+  symbol: string;
+  timeframe: '15m' | '1h' | '4h';
+  candleCount: number; // e.g. 100 to 500
+  targetProfitUSD: number; // $20
+  leverage: number;
+  stopLossPercent: number;
+  takeProfitPercent: number;
+  useBreakEvenStop: boolean;
+}
+
+export interface BacktestTrade {
+  id: string;
+  symbol: string;
+  side: TradeSide;
+  entryTime: number;
+  exitTime: number;
+  entryPrice: number;
+  exitPrice: number;
+  pnl: number;
+  pnlPercent: number;
+  exitReason: ExitReason;
+  strategyUsed: string;
+  durationCandles: number;
+}
+
+export interface BacktestReport {
+  symbol: string;
+  timeframe: string;
+  totalCandlesAnalyzed: number;
+  dateRange: { start: string; end: string };
+  totalTrades: number;
+  wins: number;
+  losses: number;
+  winRate: number;
+  totalPnL: number;
+  averageProfitPerTrade: number;
+  profitFactor: number;
+  maxDrawdownPercent: number;
+  trades: BacktestTrade[];
+  equityCurve: Array<{ time: string; balance: number }>;
 }
 
 export type Language = 'ar' | 'en';
@@ -440,4 +619,75 @@ export interface AILearningMetrics {
   autoCorrectionsApplied: number;
   optimizationScore: number;
   dominantRegime: MarketRegime;
+}
+
+// ==========================================
+// PHASE 2: Behavioral Database & Swing Types
+// ==========================================
+
+export type SwingDirection = 'UP' | 'DOWN' | 'SIDEWAYS';
+export type SwingOutcome = 'CONTINUED' | 'REVERSED' | 'SIDEWAYS' | 'PENDING';
+
+export interface SwingRecord {
+  id: string; // unique ID: e.g. `${symbol}-${startTime}-${endTime}`
+  symbol: string;
+  direction: SwingDirection;
+  startTime: number; // timestamp in ms
+  endTime: number; // timestamp in ms
+  startPrice: number;
+  endPrice: number;
+  highPrice: number;
+  lowPrice: number;
+  amplitudePct: number; // percentage price change, e.g. 1.5 for 1.5%
+  durationMinutes: number;
+  volumeChangePct: number;
+  startRsi: number;
+  endRsi: number;
+  startAdx: number;
+  endAdx: number;
+  patternTag?: string; // e.g. "P-U-1.5-47-R42-68-A18-32"
+  outcome?: SwingOutcome;
+  outcomeMagnitude?: number;
+  createdAt: number;
+}
+
+export interface PatternStats {
+  tag: string;
+  symbol: string;
+  occurrences: number;
+  lastSeen: number;
+  continuedCount: number;
+  reversedCount: number;
+  sidewaysCount: number;
+  avgNextMovement: number;
+  avgNextDuration: number;
+  avgPeakProfitBeforeReversal: number;
+  predictionConfidence: number; // 0 - 100%
+  stdDev: number;
+  avgRange: number;
+}
+
+export interface Prediction {
+  tag: string;
+  symbol: string;
+  confidence: number; // 0 - 100%
+  expectedDirection: SwingDirection;
+  expectedMovementPct: number;
+  expectedDurationMin: number;
+  historicalAccuracy: number;
+  sampleSize: number;
+}
+
+export interface SymbolBehaviorStats {
+  symbol: string;
+  totalSwings: number;
+  uniquePatternsCount: number;
+  avgUpPct: number;
+  avgDownPct: number;
+  avgDurationMin: number;
+  overallAccuracy: number;
+  bestTradingHours: number[]; // e.g. [14, 15, 18] UTC hours
+  worstTradingHours: number[];
+  topPatterns: PatternStats[];
+  lastUpdated: number;
 }

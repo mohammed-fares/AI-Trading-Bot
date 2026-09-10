@@ -53,6 +53,8 @@ import {
   calculateEMA,
   calculateRSI,
   calculateMACD,
+  generateMarketSnapshot,
+  callGeminiDecisionEngine,
 } from './services/tradingEngine';
 import {
   fetchLiveBinancePrices,
@@ -330,6 +332,16 @@ const DEFAULT_CONFIG: BotConfig = {
   timeframe: '15m',
   useTrendFilter: true,
   useSmartExit: true,
+  // Adaptive Smart Exit (Phase 1)
+  smartExitEnabled: true,
+  smartExitMinProfitPercent: 5.0,
+  smartExitMinDropRatio: 10.0,
+  smartExitMaxDropRatio: 35.0,
+  smartExitSeparateTrendRatios: true,
+  smartExitUptrendDropRatio: 25.0,
+  smartExitDowntrendDropRatio: 15.0,
+  smartExitUseAIMomentum: true,
+  smartExitVolatilityWindowMin: 15,
   balance: 1000.0,
   initialBalance: 1000.0,
   peakBalance: 1000.0,
@@ -348,6 +360,9 @@ const DEFAULT_CONFIG: BotConfig = {
   smartFreezeEnabled: true,
   smartFreezeThresholdPercent: 2.8,
   smartFreezeDurationMinutes: 15,
+  targetProfitPerTradeUSD: 20, // STRICTLY $20.00 USD PROFIT PER TRADE
+  geminiAiEngineEnabled: true,
+  geminiMinConfidence: 65,
 };
 
 interface PersistentStateV20 {
@@ -886,6 +901,8 @@ export default function App() {
           const asset = assets.find((a) => a.symbol === trade.symbol);
           const currentPrice = asset && asset.price > 0 ? asset.price : trade.currentPrice;
 
+          const highest = Math.max(trade.highestPrice || trade.entryPrice, currentPrice);
+          const lowest = Math.min(trade.lowestPrice || trade.entryPrice, currentPrice);
           const priceDiff = trade.side === 'LONG' ? currentPrice - trade.entryPrice : trade.entryPrice - currentPrice;
           const pnl = priceDiff * trade.size;
           const pnlPercent = (pnl / trade.margin) * 100;
@@ -894,12 +911,17 @@ export default function App() {
           const updatedTrade: Trade = {
             ...trade,
             currentPrice,
+            highestPrice: highest,
+            lowestPrice: lowest,
             pnl: Number(pnl.toFixed(2)),
             pnlPercent: Number(pnlPercent.toFixed(2)),
             peakPnlPercent: Number(peakPnlPercent.toFixed(2)),
           };
 
-          const exitResult = checkSmartExit(updatedTrade, currentPrice, config);
+          const exitResult = checkSmartExit(updatedTrade, currentPrice, config, asset);
+          if (exitResult.smartExitStatus) {
+            updatedTrade.smartExitStatus = exitResult.smartExitStatus;
+          }
           if (exitResult.updatedBreakEven) {
             updatedTrade.isBreakEvenTriggered = true;
           }
@@ -915,11 +937,19 @@ export default function App() {
             setClosedTrades((closedList) => [closed, ...closedList]);
 
             // Adjust Paper Balance
-            setConfig((prevCfg) => ({
-              ...prevCfg,
-              balance: Number((prevCfg.balance + closed.pnl).toFixed(2)),
-              peakBalance: Math.max(prevCfg.peakBalance, prevCfg.balance + closed.pnl),
-            }));
+            setConfig((prevCfg) => {
+              const currentPeak = prevCfg.peakBalance ?? prevCfg.balance ?? 1000;
+              const newBalance = Number((prevCfg.balance + closed.pnl).toFixed(2));
+              return {
+                ...prevCfg,
+                balance: newBalance,
+                peakBalance: Math.max(currentPeak, newBalance),
+              };
+            });
+
+            if (exitResult.reason === 'SMART_EXIT' || exitResult.reason === 'PROFIT_RETRACEMENT') {
+              addLog(`🛡️ ${exitResult.details}`, 'SUCCESS');
+            }
 
             if (closed.pnl >= 0 || exitResult.reason === 'BREAK_EVEN') {
               setConfidenceState((prev) => {
@@ -1178,6 +1208,34 @@ export default function App() {
 
         if (bestCandidate) {
           const { asset: candidate, side, audit } = bestCandidate;
+
+          // STEP: Generate structured MarketSnapshot for Gemini Decision Engine
+          const snapshot = generateMarketSnapshot(candidate, config, strategies, currentRegime);
+          let geminiDecision = candidate.geminiDecision;
+
+          // Query Gemini Decision Engine asynchronously if not recently cached
+          if (!geminiDecision || Date.now() - geminiDecision.timestamp > 90000) {
+            try {
+              geminiDecision = await callGeminiDecisionEngine(snapshot);
+              setAssets((prev) =>
+                prev.map((a) => (a.symbol === candidate.symbol ? { ...a, geminiDecision } : a))
+              );
+            } catch (err: any) {
+              console.warn('Gemini decision query error:', err);
+            }
+          }
+
+          // If Gemini Decision Engine advises against the trade, respect the AI gatekeeper
+          if (geminiDecision && !geminiDecision.isApproved) {
+            addLog(
+              isAr
+                ? `🤖 [حاجز الذكاء الاصطناعي Gemini] تعليق صفقة ${candidate.symbol}: ${geminiDecision.reasoningAr || geminiDecision.rejectionReason}`
+                : `🤖 [Gemini AI Gatekeeper] Held ${candidate.symbol}: ${geminiDecision.reasoningEn || geminiDecision.rejectionReason}`,
+              'WARN'
+            );
+            return;
+          }
+
           const sizeCalc = calculatePositionSize(
             config.balance,
             config,
@@ -1216,13 +1274,15 @@ export default function App() {
               peakPnlPercent: 0,
               auditScore: audit.auditScore,
               auditVerification: audit,
+              geminiDecision,
+              targetProfitUSD: 20,
             };
 
             setActiveTrades((prev) => [...prev, newTrade]);
             addLog(
               isAr
-                ? `🚀 [تنفيذ استراتيجية طبيعية] فتح صفقة تجريبية ${side} على ${candidate.symbol} عبر: "${strategyTitle}" | فحص: ${audit.auditScore}/100 (${audit.arabicRating}) | هامش: $${sizeCalc.margin.toFixed(1)}`
-                : `🚀 [Natural Strategy Executed] Opened paper ${side} on ${candidate.symbol} via: "${strategyTitle}" | Audit: ${audit.auditScore}/100 (${audit.rating}) | Margin: $${sizeCalc.margin.toFixed(1)}`,
+                ? `🚀 [تنفيذ صفقة بمستهدف $20] فتح صفقة تجريبية ${side} على ${candidate.symbol} | الذكاء الاصطناعي: ${geminiDecision ? `${geminiDecision.confidence}% ثقة` : 'معتمد'} | فحص: ${audit.auditScore}/100 | هامش: $${sizeCalc.margin.toFixed(1)}`
+                : `🚀 [Trade Executed - Target $20] Opened paper ${side} on ${candidate.symbol} | Gemini AI: ${geminiDecision ? `${geminiDecision.confidence}% Conf.` : 'Approved'} | Audit: ${audit.auditScore}/100 | Margin: $${sizeCalc.margin.toFixed(1)}`,
               'SUCCESS'
             );
 
@@ -1424,6 +1484,8 @@ export default function App() {
       peakPnlPercent: 0,
       auditScore: audit.auditScore,
       auditVerification: audit,
+      geminiDecision: asset.geminiDecision,
+      targetProfitUSD: 20,
     };
 
     setActiveTrades((prev) => [...prev, newTrade]);
@@ -1657,24 +1719,28 @@ export default function App() {
     );
   };
 
-  const handleResetBalance = (amount: number) => {
+  const handleResetBalance = (amount?: number) => {
+    const safeAmount =
+      typeof amount === 'number' && !isNaN(amount) && amount > 0
+        ? amount
+        : config.initialBalance || 1000;
     setConfig((prev) => ({
       ...prev,
-      balance: amount,
-      initialBalance: amount,
-      peakBalance: amount,
+      balance: safeAmount,
+      initialBalance: safeAmount,
+      peakBalance: safeAmount,
     }));
     setChartData([
       {
         time: new Date().toLocaleTimeString(isAr ? 'ar-EG' : 'en-US', { hour: '2-digit', minute: '2-digit' }),
-        balance: amount,
+        balance: safeAmount,
         pnl: 0,
       },
     ]);
     addLog(
       isAr
-        ? `💰 تم ضبط رأس المال التجريبي إلى $${amount.toFixed(2)}.`
-        : `💰 Paper account balance reset to $${amount.toFixed(2)}.`,
+        ? `💰 تم ضبط رأس المال التجريبي إلى $${safeAmount.toFixed(2)}.`
+        : `💰 Paper account balance reset to $${safeAmount.toFixed(2)}.`,
       'SUCCESS'
     );
   };

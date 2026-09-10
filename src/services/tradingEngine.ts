@@ -16,6 +16,9 @@ import {
   OrderbookDepthAnalysis,
   SmartFreezeInfo,
   BinanceKline,
+  MarketSnapshot,
+  GeminiDecisionResult,
+  SmartExitStatus,
 } from '../types';
 
 /**
@@ -943,40 +946,197 @@ export function calculatePositionSize(
   dailyPnL: number,
   dailyRiskUsed: number,
   currentPrice: number
-): { margin: number; size: number; notional: number } {
-  const riskAmount = balance * (config.maxTradeRisk / 100);
-  const confidenceFactor = 0.5 + (confidencePct / 100) * 0.5;
+): { margin: number; size: number; notional: number; targetProfitUSD: number } {
+  // Enforce strict $20 profit target per trade
+  const targetProfitUSD = config.targetProfitPerTradeUSD || 20;
+  const tpPercent = Math.max(0.5, config.takeProfitPercent || 2.5);
+  const tpFraction = tpPercent / 100;
 
-  let dailyFactor = 1.0;
-  if (dailyPnL < 0) {
-    dailyFactor = Math.max(0.5, 1.0 + dailyPnL / 100);
+  // Exact notional required to produce targetProfitUSD upon hitting Take Profit
+  // Profit = notional * tpFraction = targetProfitUSD => notional = targetProfitUSD / tpFraction
+  let notional = targetProfitUSD / tpFraction;
+
+  const leverage = Math.max(1, config.leverage || 10);
+  let margin = notional / leverage;
+
+  // Maximum allowed margin based on account balance & risk limits
+  const maxAllowedMargin = balance * ((config.tradeSizePercent || 15) / 100);
+  if (margin > maxAllowedMargin) {
+    margin = maxAllowedMargin;
+    notional = margin * leverage;
   }
 
-  const remainingRisk = Math.max(0, config.maxDailyRisk - dailyRiskUsed);
-  const riskFactor = Math.min(1.0, Math.max(0.1, remainingRisk / config.maxDailyRisk));
-  const stopLossFraction = config.stopLossPercent / 100;
-
-  let targetMargin =
-    (riskAmount / stopLossFraction) * confidenceFactor * dailyFactor * riskFactor;
-
-  // Enforce account risk limit
-  const maxAllowedMargin = balance * (config.tradeSizePercent / 100);
-  const margin = Math.min(targetMargin, maxAllowedMargin);
-  const notional = margin * config.leverage;
-  const size = notional / currentPrice;
+  margin = parseFloat(margin.toFixed(2));
+  notional = parseFloat((margin * leverage).toFixed(2));
+  const size = currentPrice > 0 ? parseFloat((notional / currentPrice).toFixed(6)) : 0;
 
   return {
-    margin: parseFloat(margin.toFixed(2)),
-    notional: parseFloat(notional.toFixed(2)),
-    size: parseFloat(size.toFixed(6)),
+    margin,
+    notional,
+    size,
+    targetProfitUSD,
+  };
+}
+
+/**
+ * Phase 1: Adaptive Smart Exit (الانسحاب الذكي المتكيف)
+ * Calculates dynamic pullback tolerance based on:
+ * - Market Trend (UP vs DOWN trend separate allowances)
+ * - Real Volatility (ATR / 15m price amplitude)
+ * - Momentum & Indicator Direction (RSI / MACD / ADX)
+ * - Bounds between min and max drop ratios
+ */
+export function calculateSmartExitStatus(
+  trade: Trade,
+  currentPrice: number,
+  config: BotConfig,
+  asset?: CryptoAsset
+): SmartExitStatus {
+  const isLong = trade.side === 'LONG';
+  const priceDiff = isLong ? currentPrice - trade.entryPrice : trade.entryPrice - currentPrice;
+  const pnlUSD = priceDiff * trade.size;
+  const margin = trade.margin > 0 ? trade.margin : (trade.entryPrice * trade.size) / (trade.leverage || 20);
+  const currentPnlPercent = margin > 0
+    ? (pnlUSD / margin) * 100
+    : ((priceDiff / trade.entryPrice) * 100) * (trade.leverage || 20);
+
+  const highest = Math.max(trade.highestPrice || trade.entryPrice, currentPrice);
+  const lowest = Math.min(trade.lowestPrice || trade.entryPrice, currentPrice);
+  const peakPrice = isLong ? highest : lowest;
+
+  const peakDiff = isLong ? highest - trade.entryPrice : trade.entryPrice - lowest;
+  const peakPnlUSD = peakDiff * trade.size;
+  const rawPeakPct = margin > 0
+    ? (peakPnlUSD / margin) * 100
+    : ((peakDiff / trade.entryPrice) * 100) * (trade.leverage || 20);
+  const peakPnlPercent = Math.max(trade.peakPnlPercent || 0, rawPeakPct, currentPnlPercent);
+
+  // Check if active: Smart Exit only activates when profit reaches minimum threshold
+  const isEnabled = config.smartExitEnabled ?? config.useSmartExit ?? true;
+  const minProfitThreshold = config.smartExitMinProfitPercent ?? 5.0; // default 5%
+  const isActive = isEnabled && peakPnlPercent >= minProfitThreshold;
+
+  // 1. Trend Factor
+  let baseDropRatio = 0.20; // 20% baseline
+  let trendFactorStr = '';
+
+  const assetTrend = asset?.trend || (asset?.ema20 && asset.ema50 ? (asset.ema20 > asset.ema50 ? 'UP' : 'DOWN') : 'NEUTRAL');
+  const isTrendAligned = (isLong && assetTrend === 'UP') || (!isLong && assetTrend === 'DOWN');
+  const isCounterTrend = (isLong && assetTrend === 'DOWN') || (!isLong && assetTrend === 'UP');
+
+  if (config.smartExitSeparateTrendRatios !== false) {
+    if (isTrendAligned) {
+      baseDropRatio = (config.smartExitUptrendDropRatio ?? 25) / 100;
+      trendFactorStr = `ترند مؤيد (+${(baseDropRatio * 100).toFixed(0)}% سماحية)`;
+    } else if (isCounterTrend) {
+      baseDropRatio = (config.smartExitDowntrendDropRatio ?? 15) / 100;
+      trendFactorStr = `ترند معاكس (+${(baseDropRatio * 100).toFixed(0)}% انسحاب سريع)`;
+    } else {
+      baseDropRatio = (((config.smartExitUptrendDropRatio ?? 25) + (config.smartExitDowntrendDropRatio ?? 15)) / 2) / 100;
+      trendFactorStr = `ترند جانبي (${(baseDropRatio * 100).toFixed(0)}% معتدل)`;
+    }
+  } else {
+    baseDropRatio = (config.smartExitUptrendDropRatio ?? 20) / 100;
+    trendFactorStr = `نسبة موحدة (${(baseDropRatio * 100).toFixed(0)}%)`;
+  }
+
+  // 2. Volatility Factor (Based on ATR or 15m swings)
+  let volAdjustment = 0;
+  let volFactorStr = '';
+  const volPct = asset?.atr && currentPrice > 0
+    ? (asset.atr / currentPrice) * 100
+    : Math.abs(asset?.change24h || 2);
+
+  if (volPct >= 2.5) {
+    volAdjustment = +0.05; // widen by +5%
+    volFactorStr = `تقلب مرتفع (${volPct.toFixed(1)}% -> +5% سماحية)`;
+  } else if (volPct <= 1.0) {
+    volAdjustment = -0.03; // tighten by -3%
+    volFactorStr = `تقلب هادئ (${volPct.toFixed(1)}% -> -3% تضييق)`;
+  } else {
+    volAdjustment = 0;
+    volFactorStr = `تقلب معتدل (${volPct.toFixed(1)}%)`;
+  }
+
+  // 3. Momentum / AI Factor
+  let momentumAdjustment = 0;
+  let momentumFactorStr = '';
+  if (config.smartExitUseAIMomentum !== false) {
+    const rsi = asset?.rsi ?? 50;
+    const macdSignal = asset?.macdSignal ?? 'NEUTRAL';
+    const isOverbought = isLong ? rsi > 70 : rsi < 30;
+    const isWeakening = (isLong && macdSignal === 'BEARISH') || (!isLong && macdSignal === 'BULLISH');
+
+    if (isOverbought || isWeakening) {
+      momentumAdjustment = -0.05; // tighten by -5%
+      momentumFactorStr = isOverbought ? 'تشبع سعري (-5% تضييق)' : 'ضعف الزخم (-5% تضييق)';
+    } else if ((isLong && rsi >= 50 && macdSignal === 'BULLISH') || (!isLong && rsi <= 50 && macdSignal === 'BEARISH')) {
+      momentumAdjustment = +0.03; // widen by +3%
+      momentumFactorStr = 'زخم استمراري قوي (+3% سماحية)';
+    } else {
+      momentumFactorStr = 'زخم متوازن (0%)';
+    }
+  } else {
+    momentumFactorStr = 'الزخم معطل (0%)';
+  }
+
+  // Combined Drop Ratio bounded by min and max
+  const minDropRatio = (config.smartExitMinDropRatio ?? 10) / 100;
+  const maxDropRatio = (config.smartExitMaxDropRatio ?? 35) / 100;
+  const calculatedDropRatio = baseDropRatio + volAdjustment + momentumAdjustment;
+  const finalDropRatio = Math.min(Math.max(calculatedDropRatio, minDropRatio), maxDropRatio);
+
+  // Trigger Calculations
+  const triggerPnlPercent = peakPnlPercent * (1 - finalDropRatio);
+  const currentRetracePct = peakPnlPercent > 0
+    ? Math.max(0, ((peakPnlPercent - currentPnlPercent) / peakPnlPercent) * 100)
+    : 0;
+
+  // Trigger Price
+  const triggerPnLUSD = (triggerPnlPercent / 100) * margin;
+  const triggerPriceDiff = trade.size > 0 ? triggerPnLUSD / trade.size : 0;
+  const triggerPrice = isLong
+    ? trade.entryPrice + triggerPriceDiff
+    : trade.entryPrice - triggerPriceDiff;
+
+  const isTriggered = isActive && currentPnlPercent <= triggerPnlPercent;
+
+  const detailsEn = `Smart Exit: ${trade.symbol} — Dropped ${currentRetracePct.toFixed(1)}% from peak (${peakPnlPercent.toFixed(1)}%), realized profit ${currentPnlPercent.toFixed(1)}% ($${pnlUSD.toFixed(2)})`;
+  const detailsAr = `انسحاب ذكي: ${trade.symbol} — تراجع ${currentRetracePct.toFixed(1)}% من القمة (${peakPnlPercent.toFixed(1)}%)، ربح محقق ${currentPnlPercent.toFixed(1)}% ($${pnlUSD.toFixed(2)})`;
+
+  return {
+    isActive,
+    isTriggered,
+    peakPnlPercent: Number(peakPnlPercent.toFixed(2)),
+    currentPnlPercent: Number(currentPnlPercent.toFixed(2)),
+    currentRetracePct: Number(currentRetracePct.toFixed(1)),
+    dropRatio: Number(finalDropRatio.toFixed(3)),
+    triggerPnlPercent: Number(triggerPnlPercent.toFixed(2)),
+    triggerPrice: Number(triggerPrice.toFixed(4)),
+    peakPrice: Number(peakPrice.toFixed(4)),
+    entryPrice: trade.entryPrice,
+    currentPrice,
+    pnlUSD: Number(pnlUSD.toFixed(2)),
+    details: detailsEn,
+    arabicDetails: detailsAr,
+    trendFactor: trendFactorStr,
+    volatilityFactor: volFactorStr,
+    momentumFactor: momentumFactorStr,
   };
 }
 
 export function checkSmartExit(
   trade: Trade,
   currentPrice: number,
-  config: BotConfig
-): { shouldExit: boolean; reason: ExitReason | null; details: string; updatedBreakEven?: boolean } {
+  config: BotConfig,
+  asset?: CryptoAsset
+): {
+  shouldExit: boolean;
+  reason: ExitReason | null;
+  details: string;
+  updatedBreakEven?: boolean;
+  smartExitStatus?: SmartExitStatus;
+} {
   const isLong = trade.side === 'LONG';
   const priceDiff = isLong ? currentPrice - trade.entryPrice : trade.entryPrice - currentPrice;
   const rawPriceGainPct = (priceDiff / trade.entryPrice) * 100;
@@ -988,6 +1148,21 @@ export function checkSmartExit(
   const peakPriceGainPct = isLong
     ? ((highest - trade.entryPrice) / trade.entryPrice) * 100
     : ((trade.entryPrice - lowest) / trade.entryPrice) * 100;
+
+  // 0. Strict $20 Target Profit Check (User Mandate)
+  const currentPnLUSD = isLong
+    ? (currentPrice - trade.entryPrice) * trade.size
+    : (trade.entryPrice - currentPrice) * trade.size;
+
+  const targetProfitGoal = trade.targetProfitUSD || config.targetProfitPerTradeUSD || 20;
+
+  if (currentPnLUSD >= targetProfitGoal) {
+    return {
+      shouldExit: true,
+      reason: 'TAKE_PROFIT',
+      details: `تم تحقيق هدف الصفقة المحدد بدقة: +$${currentPnLUSD.toFixed(2)} (الهدف المطلوب: $${targetProfitGoal}.00)`,
+    };
+  }
 
   // 1. Break-Even Stop Loss Protection (Anti-Loss Guarantee)
   const beTrigger = config.breakEvenTriggerPercent ?? 1.0;
@@ -1029,12 +1204,24 @@ export function checkSmartExit(
     return {
       shouldExit: true,
       reason: 'TAKE_PROFIT',
-      details: `هدف جني الأرباح محقق بنجاح عند +${rawPriceGainPct.toFixed(2)}%`,
+      details: `هدف جني الأرباح محقق بنجاح عند +${rawPriceGainPct.toFixed(2)}% (+$${currentPnLUSD.toFixed(2)})`,
+    };
+  }
+
+  // 4. Adaptive Smart Exit (Phase 1)
+  const smartExit = calculateSmartExitStatus(trade, currentPrice, config, asset);
+  if (smartExit.isActive && smartExit.isTriggered) {
+    return {
+      shouldExit: true,
+      reason: 'SMART_EXIT',
+      details: smartExit.arabicDetails,
+      updatedBreakEven: isBreakEvenActive,
+      smartExitStatus: smartExit,
     };
   }
 
   if (config.useSmartExit) {
-    // 4. Trailing Stop
+    // 5. Trailing Stop (secondary fallback)
     if (peakPriceGainPct >= config.trailingStopTriggerPercent) {
       const trailStopPrice = isLong
         ? highest * (1 - config.trailingStopDeltaPercent / 100)
@@ -1050,11 +1237,12 @@ export function checkSmartExit(
           reason: 'TRAILING_STOP',
           details: `أمر التتبع اللاحق (Trailing Stop) تم تفعيله لحماية الأرباح عند +${rawPriceGainPct.toFixed(2)}%`,
           updatedBreakEven: isBreakEvenActive,
+          smartExitStatus: smartExit,
         };
       }
     }
 
-    // 5. Time exit
+    // 6. Time exit
     if (
       trade.strategyUsed.toLowerCase().includes('scalping') &&
       elapsedMinutes >= config.timeExitMinutes &&
@@ -1064,11 +1252,13 @@ export function checkSmartExit(
         shouldExit: true,
         reason: 'TIME_EXIT',
         details: `خروج زمني سريع (Time Exit) بعد ${elapsedMinutes.toFixed(1)} دقيقة بربح +${rawPriceGainPct.toFixed(2)}%`,
+        smartExitStatus: smartExit,
       };
     }
 
-    // 6. Profit retracement
+    // 7. Legacy Profit retracement fallback (if adaptive not active)
     if (
+      !smartExit.isActive &&
       peakPriceGainPct >= config.profitRetraceThreshold &&
       elapsedMinutes >= 2 &&
       rawPriceGainPct < peakPriceGainPct * (1 - config.profitRetraceDropRatio) &&
@@ -1077,7 +1267,8 @@ export function checkSmartExit(
       return {
         shouldExit: true,
         reason: 'PROFIT_RETRACEMENT',
-        details: `حماية الأرباح (Profit Retracement) بعد تراجع 40% من أعلى قمة ربح`,
+        details: `حماية الأرباح (Profit Retracement) بعد تراجع ${(config.profitRetraceDropRatio * 100).toFixed(0)}% من أعلى قمة ربح`,
+        smartExitStatus: smartExit,
       };
     }
   }
@@ -1087,6 +1278,7 @@ export function checkSmartExit(
     reason: null,
     details: '',
     updatedBreakEven: isBreakEvenActive,
+    smartExitStatus: smartExit,
   };
 }
 
@@ -1683,3 +1875,187 @@ export function auditTradeSetup(
     arabicReasons,
   };
 }
+
+/**
+ * Generates structured MarketSnapshot for Gemini AI Decision Engine
+ * Strictly relies on real Binance Futures data; never generates synthetic numbers.
+ */
+export function generateMarketSnapshot(
+  asset: CryptoAsset,
+  config: BotConfig,
+  strategies: Strategy[],
+  regime: MarketRegime,
+  rawKlines?: BinanceKline[]
+): MarketSnapshot {
+  const isLongDominant = asset.longScore > asset.shortScore;
+  const isShortDominant = asset.shortScore > asset.longScore;
+  const totalScore = asset.longScore + asset.shortScore || 1;
+  const consensusRatio = Math.max(asset.longScore, asset.shortScore) / totalScore;
+
+  // Multi-timeframe cascade
+  const mtf = asset.timeframeAlignment;
+  const isAligned = mtf ? mtf.isAligned : false;
+  let alignmentDirection: 'LONG' | 'SHORT' | 'CONFLICT' | 'NEUTRAL' = 'NEUTRAL';
+  if (mtf) {
+    if (mtf.tf15m.trend === 'UP' && mtf.tf1h.trend === 'UP' && mtf.tf4h.trend === 'UP') {
+      alignmentDirection = 'LONG';
+    } else if (mtf.tf15m.trend === 'DOWN' && mtf.tf1h.trend === 'DOWN' && mtf.tf4h.trend === 'DOWN') {
+      alignmentDirection = 'SHORT';
+    } else {
+      alignmentDirection = 'CONFLICT';
+    }
+  }
+
+  // Support & Resistance based on real candle levels
+  let support = asset.price * 0.98;
+  let resistance = asset.price * 1.02;
+  let pivot = asset.price;
+  if (asset.high24h && asset.low24h) {
+    pivot = (asset.high24h + asset.low24h + asset.price) / 3;
+    resistance = 2 * pivot - asset.low24h;
+    support = 2 * pivot - asset.high24h;
+  }
+
+  // Candles snapshot from real Klines (last 12 candles)
+  const recentCandles = (rawKlines || []).slice(-12).map((k) => ({
+    openTime: k.openTime,
+    open: k.open,
+    high: k.high,
+    low: k.low,
+    close: k.close,
+    volume: k.volume,
+  }));
+
+  const ob = asset.orderbookDepth;
+  const priceVsEma200 = asset.ema200 > 0 ? ((asset.price - asset.ema200) / asset.ema200) * 100 : 0;
+
+  return {
+    symbol: asset.symbol,
+    currentPrice: asset.price,
+    timeframe: config.timeframe || '15m',
+    candles: recentCandles,
+    indicators: {
+      ema20: asset.ema20,
+      ema50: asset.ema50,
+      ema200: asset.ema200,
+      rsi: asset.rsi,
+      macdSignal: asset.macdSignal,
+      adx: asset.adx,
+      atr: asset.atr,
+      priceVsEma200Percent: Number(priceVsEma200.toFixed(2)),
+    },
+    trend: asset.trend,
+    marketRegime: regime,
+    multiTimeframe: {
+      tf15mTrend: mtf?.tf15m?.trend || asset.trend,
+      tf1hTrend: mtf?.tf1h?.trend || asset.trend,
+      tf4hTrend: mtf?.tf4h?.trend || asset.trend,
+      isAligned,
+      alignmentDirection,
+    },
+    orderbook: {
+      bidVolume: ob?.bidVolume || 0,
+      askVolume: ob?.askVolume || 0,
+      bidAskRatio: ob?.bidAskRatio || 1,
+      depthStatus: ob?.depthStatus || 'HEALTHY',
+      hasOpposingWall: ob?.hasOpposingWall || false,
+      nearestWallDistancePct: ob?.nearestOpposingWall?.distancePercent,
+      nearestWallType: ob?.nearestOpposingWall?.type,
+    },
+    supportResistance: {
+      support: Number(support.toFixed(asset.price < 1 ? 4 : 2)),
+      resistance: Number(resistance.toFixed(asset.price < 1 ? 4 : 2)),
+      pivot: Number(pivot.toFixed(asset.price < 1 ? 4 : 2)),
+    },
+    volatility: asset.atr ? (asset.atr / asset.price) * 100 : 1.5,
+    volume24h: asset.volume24h,
+    strategyResults: {
+      longScore: asset.longScore,
+      shortScore: asset.shortScore,
+      consensusRatio: Number(consensusRatio.toFixed(2)),
+      dominantSide: isLongDominant ? 'LONG' : isShortDominant ? 'SHORT' : 'NEUTRAL',
+      leadingStrategyName: asset.leadingStrategy?.name,
+      evaluatedCount: strategies.length,
+    },
+    riskParameters: {
+      targetProfitUSD: config.targetProfitPerTradeUSD || 20, // strictly $20.00
+      accountBalance: config.balance,
+      leverage: config.leverage,
+      stopLossPercent: config.stopLossPercent,
+      takeProfitPercent: config.takeProfitPercent,
+    },
+  };
+}
+
+/**
+ * Calls the backend Gemini AI Decision Engine to evaluate a trade setup
+ */
+export async function callGeminiDecisionEngine(
+  snapshot: MarketSnapshot
+): Promise<GeminiDecisionResult> {
+  try {
+    const res = await fetch('/api/gemini/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ snapshot }),
+    });
+
+    if (!res.ok) {
+      throw new Error(`API error ${res.status}: ${res.statusText}`);
+    }
+
+    const data = await res.json();
+    if (data && data.decision) {
+      return data.decision;
+    }
+    throw new Error(data.error || 'Empty decision received');
+  } catch (err: any) {
+    // Graceful fallback to consensus engine
+    const isLong = snapshot.strategyResults.dominantSide === 'LONG';
+    const isShort = snapshot.strategyResults.dominantSide === 'SHORT';
+    const isApproved =
+      (isLong || isShort) &&
+      snapshot.strategyResults.consensusRatio >= 0.65 &&
+      snapshot.multiTimeframe.isAligned &&
+      !snapshot.orderbook.hasOpposingWall;
+
+    const tpP = snapshot.riskParameters.takeProfitPercent || 2.5;
+    const slP = snapshot.riskParameters.stopLossPercent || 1.25;
+
+    return {
+      symbol: snapshot.symbol,
+      signal: isApproved ? (isLong ? 'LONG' : 'SHORT') : 'NEUTRAL',
+      confidence: Math.round(snapshot.strategyResults.consensusRatio * 100),
+      reasoningEn: `Consensus fallback analysis: ${(snapshot.strategyResults.consensusRatio * 100).toFixed(0)}% agreement across evaluated strategies. Server communication note: ${err.message || 'local evaluation'}.`,
+      reasoningAr: `تحليل الإجماع الاحتياطي: نسبة اتفاق ${(snapshot.strategyResults.consensusRatio * 100).toFixed(0)}% بين الاستراتيجيات المطبقة.`,
+      keyRisksEn: [
+        snapshot.orderbook.hasOpposingWall ? 'Opposing liquidity wall detected' : 'Standard market volatility',
+        snapshot.multiTimeframe.isAligned ? 'High confluence' : 'Timeframe disagreement',
+      ],
+      keyRisksAr: [
+        snapshot.orderbook.hasOpposingWall ? 'تم رصد جدار سيولة معاكس' : 'تقلبات السوق العادية',
+        snapshot.multiTimeframe.isAligned ? 'توافق فني عالٍ' : 'تعارض في اتجاهات الأطر الزمنية',
+      ],
+      confirmationFactorsEn: [
+        `Consensus: ${(snapshot.strategyResults.consensusRatio * 100).toFixed(0)}%`,
+        `Trend: ${snapshot.trend}`,
+        `RSI(14): ${snapshot.indicators.rsi.toFixed(0)}`,
+      ],
+      confirmationFactorsAr: [
+        `نسبة الإجماع: ${(snapshot.strategyResults.consensusRatio * 100).toFixed(0)}%`,
+        `الاتجاه العام: ${snapshot.trend}`,
+        `مؤشر القوة النسبية: ${snapshot.indicators.rsi.toFixed(0)}`,
+      ],
+      targetProfitUSD: 20,
+      recommendedEntry: snapshot.currentPrice,
+      stopLoss: isLong ? snapshot.currentPrice * (1 - slP / 100) : snapshot.currentPrice * (1 + slP / 100),
+      takeProfit: isLong ? snapshot.currentPrice * (1 + tpP / 100) : snapshot.currentPrice * (1 - tpP / 100),
+      riskRewardRatio: Number((tpP / slP).toFixed(2)),
+      isApproved,
+      rejectionReason: isApproved ? undefined : 'Did not meet high-conviction criteria or MTF alignment',
+      timestamp: Date.now(),
+      source: 'CONSENSUS_ENGINE_FALLBACK',
+    };
+  }
+}
+

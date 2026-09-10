@@ -23,6 +23,8 @@ import {
   evaluateEnsembleSignal,
 } from '../src/services/tradingEngine';
 
+import { detectSwings } from '../src/services/swingDetector';
+
 import {
   CryptoAsset,
   BotConfig,
@@ -66,6 +68,15 @@ const DEFAULT_CONFIG: BotConfig = {
   timeframe: '15m',
   useTrendFilter: true,
   useSmartExit: true,
+  smartExitEnabled: true,
+  smartExitMinProfitPercent: 5.0,
+  smartExitMinDropRatio: 10.0,
+  smartExitMaxDropRatio: 35.0,
+  smartExitSeparateTrendRatios: true,
+  smartExitUptrendDropRatio: 25.0,
+  smartExitDowntrendDropRatio: 15.0,
+  smartExitUseAIMomentum: true,
+  smartExitVolatilityWindowMin: 15,
   balance: 1000.0,
   initialBalance: 1000.0,
   peakBalance: 1000.0,
@@ -84,6 +95,9 @@ const DEFAULT_CONFIG: BotConfig = {
   smartFreezeEnabled: true,
   smartFreezeThresholdPercent: 2.8,
   smartFreezeDurationMinutes: 15,
+  targetProfitPerTradeUSD: 20,
+  geminiAiEngineEnabled: true,
+  geminiMinConfidence: 65,
 };
 
 let passedTests = 0;
@@ -326,6 +340,77 @@ async function runAllTests() {
   const signalEvaluation2 = evaluateEnsembleSignal(testAssetValid, INITIAL_STRATEGIES, '15m', 'BULL_TREND');
   assert(signalEvaluation1.signal === signalEvaluation2.signal, 'Ensemble signal is 100% deterministic');
   assert(signalEvaluation1.confidence === signalEvaluation2.confidence, 'Ensemble confidence is 100% deterministic');
+
+  // TEST 13: Phase 1 Adaptive Smart Exit (Volatility, Trend, Momentum)
+  console.log('\nTEST 13: Phase 1 Adaptive Smart Exit Engine');
+  const profitableTrade: Trade = {
+    id: 'test-trade-smart-exit',
+    symbol: 'BTCUSDT',
+    side: 'LONG',
+    entryPrice: 60000,
+    currentPrice: 62400,
+    highestPrice: 62400,
+    lowestPrice: 59900,
+    margin: 100,
+    notional: 1000,
+    size: 0.0166,
+    leverage: 10,
+    pnl: 39.84,
+    pnlPercent: 39.84,
+    peakPnlPercent: 40.0,
+    stopLoss: 58000,
+    takeProfit: 75000,
+    confidence: 85,
+    targetProfitUSD: 100, // Explicit target so Smart Exit can be tested under high target
+    openedAt: Date.now() - 60000,
+    strategyUsed: 'Trend Following 1h',
+  };
+
+  // With a small pullback (10% drop from peak), should NOT trigger smart exit
+  const smallPullbackPrice = 62160; // price dropped 240 of 2400 gain = 10% pullback
+  const smallPullbackTrade = {
+    ...profitableTrade,
+    currentPrice: smallPullbackPrice,
+    pnlPercent: 36.0,
+  };
+  const smallExitRes = checkSmartExit(smallPullbackTrade, smallPullbackPrice, DEFAULT_CONFIG, testAssetValid);
+  assert(smallExitRes.shouldExit === false, 'Small pullback (10%) within allowed drop ratio does NOT trigger exit');
+  assert(smallExitRes.smartExitStatus !== undefined && smallExitRes.smartExitStatus.isActive === true, 'Smart Exit status is active tracking peak and trigger');
+
+  // With a large pullback (30% drop from peak), should trigger smart exit
+  const largePullbackPrice = 61680; // price dropped 720 of 2400 gain = 30% pullback
+  const largePullbackTrade = {
+    ...profitableTrade,
+    currentPrice: largePullbackPrice,
+    pnlPercent: 28.0,
+  };
+  const largeExitRes = checkSmartExit(largePullbackTrade, largePullbackPrice, DEFAULT_CONFIG, testAssetValid);
+  assert(largeExitRes.shouldExit === true, 'Large pullback (30%) exceeding drop ratio triggers smart exit');
+  assert(largeExitRes.reason === 'SMART_EXIT', 'Exit reason is SMART_EXIT');
+
+  // TEST 14: Phase 2 Swing Detector (ZigZag, Metrics & <50ms Benchmark)
+  console.log('\nTEST 14: Phase 2 Swing Detector (ZigZag & Execution Speed)');
+  const tStart = Date.now();
+  const detectedSwings = detectSwings(res15m.data!, 'BTCUSDT', { minDeviationPct: 0.3 });
+  const tElapsed = Date.now() - tStart;
+
+  assert(Array.isArray(detectedSwings) && detectedSwings.length > 0, `Swings successfully detected (found ${detectedSwings.length} swings)`);
+  assert(tElapsed < 50, `Execution speed is blazing fast (< 50ms requirement): took ${tElapsed}ms for ${res15m.data!.length} candles`);
+
+  const firstSwing = detectedSwings[0];
+  assert(firstSwing.symbol === 'BTCUSDT', 'Swing symbol matches');
+  assert(firstSwing.direction === 'UP' || firstSwing.direction === 'DOWN', 'Swing direction is defined');
+  assert(firstSwing.amplitudePct > 0, `Swing amplitude is positive: ${firstSwing.amplitudePct}%`);
+  assert(firstSwing.durationMinutes > 0, `Swing duration is positive: ${firstSwing.durationMinutes}m`);
+  assert(firstSwing.startRsi >= 0 && firstSwing.startRsi <= 100, `Swing startRsi is valid: ${firstSwing.startRsi}`);
+  assert(firstSwing.endRsi >= 0 && firstSwing.endRsi <= 100, `Swing endRsi is valid: ${firstSwing.endRsi}`);
+  assert(firstSwing.startAdx >= 0 && firstSwing.startAdx <= 100, `Swing startAdx is valid: ${firstSwing.startAdx}`);
+  assert(firstSwing.endAdx >= 0 && firstSwing.endAdx <= 100, `Swing endAdx is valid: ${firstSwing.endAdx}`);
+  assert(firstSwing.outcome !== undefined, `Completed swing has classified outcome: ${firstSwing.outcome}`);
+  assert(detectedSwings[detectedSwings.length - 1].outcome === 'PENDING', 'Latest active swing outcome is PENDING');
+
+  // Empty / insufficient data returns empty array
+  assert(detectSwings([], 'BTCUSDT').length === 0, 'Empty klines gracefully returns empty array');
 
   console.log('\n=====================================================');
   console.log(`VERIFICATION COMPLETE: ${passedTests}/${totalTests} TESTS PASSED`);

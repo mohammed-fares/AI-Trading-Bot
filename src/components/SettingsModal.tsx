@@ -27,7 +27,7 @@ interface SettingsModalProps {
   onSaveConfig: (newConfig: BotConfig) => void;
   onPurgeDatabase?: () => void;
   onResetDatabase?: () => void;
-  onResetBalance?: () => void;
+  onResetBalance?: (amount?: number) => void;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -136,8 +136,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const handleResetBal = () => {
     if (onResetBalance) {
-      onResetBalance();
-      setFormData((prev) => ({ ...prev, balance: prev.initialBalance || 1000 }));
+      const resetVal = formData.initialBalance || 1000;
+      onResetBalance(resetVal);
+      setFormData((prev) => ({
+        ...prev,
+        balance: resetVal,
+        initialBalance: resetVal,
+        peakBalance: resetVal,
+      }));
       setPurgeNotice(
         isAr ? 'تم إعادة تعيين الرصيد للرصيد الابتدائي!' : 'Balance reset to initial amount!'
       );
@@ -521,13 +527,229 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <input
                     type="checkbox"
                     checked={formData.useSmartExit}
-                    onChange={(e) => setFormData({ ...formData, useSmartExit: e.target.checked })}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        useSmartExit: e.target.checked,
+                        smartExitEnabled: e.target.checked,
+                      })
+                    }
                     className="rounded text-[#fcd535] focus:ring-0 accent-[#fcd535]"
                   />
                   <div>
                     <span className="font-semibold text-[#eaecef]">{t.settingsSmartExit}</span>
                   </div>
                 </label>
+              </div>
+
+              {/* Adaptive Smart Exit Section (Phase 1) */}
+              <div className="p-3.5 rounded-xl bg-[#1e2329] border border-amber-500/30 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Zap className="h-4 w-4 text-amber-400" />
+                    <div>
+                      <span className="font-bold text-[#eaecef] text-xs block">
+                        {t.smartExitHeaderTitle}
+                      </span>
+                      <span className="text-[10px] text-[#848e9c]">
+                        {t.smartExitHeaderDesc}
+                      </span>
+                    </div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={formData.smartExitEnabled ?? formData.useSmartExit ?? true}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        smartExitEnabled: e.target.checked,
+                        useSmartExit: e.target.checked,
+                      })
+                    }
+                    className="rounded text-amber-400 focus:ring-0 accent-amber-500 h-4 w-4 cursor-pointer"
+                  />
+                </div>
+
+                {(formData.smartExitEnabled ?? formData.useSmartExit ?? true) && (
+                  <div className="space-y-3 pt-2 border-t border-[#2b2f36] text-xs font-mono">
+                    {/* Row 1: Min Profit to activate, Min Drop Ratio, Max Drop Ratio */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                      <div>
+                        <label className="text-[#848e9c] block mb-1 text-[11px]">
+                          {t.smartExitMinProfitLabel}
+                        </label>
+                        <input
+                          type="number"
+                          step="0.5"
+                          min="1.0"
+                          max="20.0"
+                          value={formData.smartExitMinProfitPercent ?? 5.0}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              smartExitMinProfitPercent: parseFloat(e.target.value) || 5.0,
+                            })
+                          }
+                          className="w-full bg-[#0b0e11] border border-[#2b2f36] rounded-lg px-2.5 py-1.5 text-amber-400 font-bold focus:outline-none focus:border-amber-500"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-[#848e9c] block mb-1 text-[11px]">
+                          {t.smartExitMinDropLabel}
+                        </label>
+                        <input
+                          type="number"
+                          step="1.0"
+                          min="5.0"
+                          max="25.0"
+                          value={formData.smartExitMinDropRatio ?? 10.0}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              smartExitMinDropRatio: parseFloat(e.target.value) || 10.0,
+                            })
+                          }
+                          className="w-full bg-[#0b0e11] border border-[#2b2f36] rounded-lg px-2.5 py-1.5 text-[#eaecef] font-bold focus:outline-none focus:border-amber-500"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-[#848e9c] block mb-1 text-[11px]">
+                          {t.smartExitMaxDropLabel}
+                        </label>
+                        <input
+                          type="number"
+                          step="1.0"
+                          min="15.0"
+                          max="50.0"
+                          value={formData.smartExitMaxDropRatio ?? 35.0}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              smartExitMaxDropRatio: parseFloat(e.target.value) || 35.0,
+                            })
+                          }
+                          className="w-full bg-[#0b0e11] border border-[#2b2f36] rounded-lg px-2.5 py-1.5 text-[#eaecef] font-bold focus:outline-none focus:border-amber-500"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Row 2: Trend separation toggle & Ratios */}
+                    <div className="p-2.5 rounded-lg bg-[#0b0e11] border border-[#2b2f36] space-y-2">
+                      <label className="flex items-center justify-between cursor-pointer">
+                        <span className="font-semibold text-[#eaecef] text-[11px]">
+                          {t.smartExitSeparateTrendLabel}
+                        </span>
+                        <input
+                          type="checkbox"
+                          checked={formData.smartExitSeparateTrendRatios ?? true}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              smartExitSeparateTrendRatios: e.target.checked,
+                            })
+                          }
+                          className="rounded text-amber-400 focus:ring-0 accent-amber-500 h-4 w-4 shrink-0"
+                        />
+                      </label>
+
+                      {(formData.smartExitSeparateTrendRatios ?? true) && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 border-t border-[#1e2329]">
+                          <div>
+                            <span className="text-[#848e9c] block text-[10px] mb-1">
+                              {t.smartExitUptrendRatioLabel}
+                            </span>
+                            <input
+                              type="number"
+                              step="1.0"
+                              min="10.0"
+                              max="40.0"
+                              value={formData.smartExitUptrendDropRatio ?? 25.0}
+                              onChange={(e) =>
+                                setFormData({
+                                  ...formData,
+                                  smartExitUptrendDropRatio: parseFloat(e.target.value) || 25.0,
+                                })
+                              }
+                              className="w-full bg-[#181a20] border border-[#2b2f36] rounded px-2.5 py-1 text-emerald-400 font-bold"
+                            />
+                          </div>
+
+                          <div>
+                            <span className="text-[#848e9c] block text-[10px] mb-1">
+                              {t.smartExitDowntrendRatioLabel}
+                            </span>
+                            <input
+                              type="number"
+                              step="1.0"
+                              min="5.0"
+                              max="30.0"
+                              value={formData.smartExitDowntrendDropRatio ?? 15.0}
+                              onChange={(e) =>
+                                setFormData({
+                                  ...formData,
+                                  smartExitDowntrendDropRatio: parseFloat(e.target.value) || 15.0,
+                                })
+                              }
+                              className="w-full bg-[#181a20] border border-[#2b2f36] rounded px-2.5 py-1 text-rose-400 font-bold"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Row 3: AI / Momentum Toggle & Volatility Window */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <label className="flex items-center justify-between p-2.5 rounded-lg bg-[#0b0e11] border border-[#2b2f36] cursor-pointer hover:border-amber-500/40 transition">
+                        <div className="pr-2">
+                          <span className="font-semibold text-[#eaecef] text-[11px] block">
+                            {t.smartExitUseAILabel}
+                          </span>
+                          <span className="text-[9px] text-[#848e9c]">
+                            {isAr ? 'توسيع/تضييق نسبة التراجع حسب مؤشرات الزخم' : 'Dynamic ratio adaptation via momentum'}
+                          </span>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={formData.smartExitUseAIMomentum ?? true}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              smartExitUseAIMomentum: e.target.checked,
+                            })
+                          }
+                          className="rounded text-amber-400 focus:ring-0 accent-amber-500 h-4 w-4 shrink-0"
+                        />
+                      </label>
+
+                      <div className="p-2.5 rounded-lg bg-[#0b0e11] border border-[#2b2f36] flex items-center justify-between">
+                        <div>
+                          <span className="font-semibold text-[#eaecef] text-[11px] block">
+                            {t.smartExitVolWindowLabel}
+                          </span>
+                          <span className="text-[9px] text-[#848e9c]">
+                            {isAr ? 'قياس تذبذب ATR وحركة الشموع' : 'ATR & candle swing window'}
+                          </span>
+                        </div>
+                        <input
+                          type="number"
+                          min="5"
+                          max="60"
+                          step="5"
+                          value={formData.smartExitVolatilityWindowMin ?? 15}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              smartExitVolatilityWindowMin: parseInt(e.target.value) || 15,
+                            })
+                          }
+                          className="w-16 bg-[#181a20] border border-[#2b2f36] rounded px-2 py-1 text-amber-400 font-bold text-center"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* High-Precision Trade Audit Section */}

@@ -175,24 +175,114 @@ export const ActiveTradesPanel: React.FC<ActiveTradesPanelProps> = ({ trades, on
                     </td>
 
                     {/* Smart Exit */}
-                    <td className="py-2.5 px-2 font-sans">
-                      <div className="space-y-1">
-                        {trade.isBreakEvenTriggered ? (
-                          <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 font-mono font-bold">
-                            <ShieldCheck className="h-3 w-3 text-cyan-400" />
-                            <span>Break-Even 🛡️</span>
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-[#1e2329] border border-[#2b2f36] text-[#fcd535] font-mono">
-                            <Zap className="h-3 w-3 text-[#fcd535]" />
-                            <span>Trailing (&gt;1.2%)</span>
-                          </span>
-                        )}
-                        <div className="flex items-center gap-1 text-[10px] text-[#848e9c] font-mono">
-                          <Clock className="h-2.5 w-2.5" />
-                          <span>{elapsedMin}m</span>
+                    <td className="py-2.5 px-2 font-mono min-w-[210px]">
+                      {trade.smartExitStatus?.isActive ? (
+                        <div className="space-y-1.5 p-1.5 rounded-lg bg-[#0b0e11] border border-amber-500/30">
+                          {/* Row 1: Active Badge & Drop Ratio */}
+                          <div className="flex items-center justify-between text-[10px]">
+                            <span className="inline-flex items-center gap-1 font-bold text-amber-400">
+                              <Zap className="h-3 w-3 animate-pulse text-amber-400" />
+                              <span>{isAr ? 'متكيف نشط' : 'Adaptive Active'}</span>
+                            </span>
+                            <span className="text-[#848e9c] text-[9px]">
+                              {isAr ? 'سماحية' : 'Tol'}: {(trade.smartExitStatus.dropRatio * 100).toFixed(0)}%
+                            </span>
+                          </div>
+
+                          {/* Row 2: Peak vs Trigger Price */}
+                          <div className="grid grid-cols-2 gap-1 text-[9px] text-[#eaecef]">
+                            <div>
+                              <span className="text-[#848e9c] block">{isAr ? 'القمة' : 'Peak'}:</span>
+                              <span className="text-emerald-400 font-bold">
+                                ${trade.smartExitStatus.peakPrice.toLocaleString(undefined, {
+                                  minimumFractionDigits: trade.smartExitStatus.peakPrice < 1 ? 4 : 2,
+                                })}
+                              </span>
+                              <span className="text-[8px] text-emerald-400/80 ml-0.5">
+                                (+{trade.smartExitStatus.peakPnlPercent.toFixed(1)}%)
+                              </span>
+                            </div>
+                            <div className={isAr ? 'text-left' : 'text-right'}>
+                              <span className="text-[#848e9c] block">{isAr ? 'الخروج' : 'Trigger'}:</span>
+                              <span className="text-rose-400 font-bold">
+                                ${trade.smartExitStatus.triggerPrice.toLocaleString(undefined, {
+                                  minimumFractionDigits: trade.smartExitStatus.triggerPrice < 1 ? 4 : 2,
+                                })}
+                              </span>
+                              <span className="text-[8px] text-rose-400/80 mr-0.5">
+                                ({trade.smartExitStatus.triggerPnlPercent >= 0 ? '+' : ''}
+                                {trade.smartExitStatus.triggerPnlPercent.toFixed(1)}%)
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Row 3: Gauge Progress Bar */}
+                          {(() => {
+                            const allowedRetrace = trade.smartExitStatus.dropRatio * 100;
+                            const currentRetrace = trade.smartExitStatus.currentRetracePct;
+                            const bufferPct = Math.max(
+                              0,
+                              Math.min(100, 100 - (currentRetrace / (allowedRetrace || 1)) * 100)
+                            );
+                            const isWarning = bufferPct < 30;
+
+                            return (
+                              <div className="space-y-0.5">
+                                <div className="h-1.5 w-full bg-[#1e2329] rounded-full overflow-hidden border border-[#2b2f36]">
+                                  <div
+                                    className={`h-full transition-all duration-300 rounded-full ${
+                                      isWarning
+                                        ? 'bg-gradient-to-r from-red-500 to-amber-500 animate-pulse'
+                                        : 'bg-gradient-to-r from-amber-400 to-emerald-400'
+                                    }`}
+                                    style={{ width: `${bufferPct}%` }}
+                                  />
+                                </div>
+                                <div className="flex justify-between text-[8px] text-[#848e9c]">
+                                  <span>
+                                    {isAr ? 'أمان التراجع' : 'Buffer'}: {bufferPct.toFixed(0)}%
+                                  </span>
+                                  <span className={isWarning ? 'text-rose-400 font-bold' : 'text-[#848e9c]'}>
+                                    {isAr ? 'تراجع' : 'Retraced'}: {currentRetrace.toFixed(1)}%
+                                  </span>
+                                </div>
+                              </div>
+                            );
+                          })()}
+
+                          {/* Factors Badge */}
+                          {(trade.smartExitStatus.trendFactor || trade.smartExitStatus.volatilityFactor) && (
+                            <div className="text-[8px] text-amber-300/90 bg-amber-500/10 px-1 py-0.5 rounded border border-amber-500/20 truncate">
+                              {trade.smartExitStatus.trendFactor} | {trade.smartExitStatus.volatilityFactor}
+                            </div>
+                          )}
                         </div>
-                      </div>
+                      ) : (
+                        <div className="space-y-1">
+                          {trade.isBreakEvenTriggered ? (
+                            <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 font-mono font-bold">
+                              <ShieldCheck className="h-3 w-3 text-cyan-400" />
+                              <span>Break-Even 🛡️</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-[#1e2329] border border-[#2b2f36] text-[#848e9c] font-mono">
+                              <Zap className="h-3 w-3 text-[#fcd535]" />
+                              <span>{isAr ? 'في الانتظار (>5% ربح)' : 'Awaiting (>5% PnL)'}</span>
+                            </span>
+                          )}
+                          <div className="flex items-center justify-between text-[9px] text-[#848e9c] font-mono">
+                            <span className="flex items-center gap-1">
+                              <Clock className="h-2.5 w-2.5" />
+                              <span>{elapsedMin}m</span>
+                            </span>
+                            {trade.peakPnlPercent !== undefined && (
+                              <span className="text-emerald-400/80">
+                                {isAr ? 'قمة' : 'Peak'}: {trade.peakPnlPercent.toFixed(1)}%
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </td>
 
                     {/* Action Button */}

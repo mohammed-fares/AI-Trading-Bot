@@ -174,6 +174,17 @@ export interface Translations {
   settingsMaxDrawdown: string;
   settingsTrendFilter: string;
   settingsSmartExit: string;
+  smartExitHeaderTitle: string;
+  smartExitHeaderDesc: string;
+  smartExitEnableLabel: string;
+  smartExitMinProfitLabel: string;
+  smartExitMinDropLabel: string;
+  smartExitMaxDropLabel: string;
+  smartExitSeparateTrendLabel: string;
+  smartExitUptrendRatioLabel: string;
+  smartExitDowntrendRatioLabel: string;
+  smartExitUseAILabel: string;
+  smartExitVolWindowLabel: string;
   settingsPureLearningTitle: string;
   settingsPureLearningDesc: string;
   settingsResetHistoryBtn: string;
@@ -475,6 +486,17 @@ export const translations: Record<Language, Translations> = {
     settingsMaxDrawdown: 'السحب الأقصى المسموح للحساب (%):',
     settingsTrendFilter: 'تفعيل فلتر الاتجاه العام (يمنع الصفقات المعاكسة)',
     settingsSmartExit: 'تفعيل الخروج الذكي (وقف متحرك وخروج زمني)',
+    smartExitHeaderTitle: 'نظام الانسحاب الذكي المتكيف مع حالة السوق (Adaptive Smart Exit)',
+    smartExitHeaderDesc: 'آلية خروج ديناميكية متكيفة مع تقلبات العملة والاتجاه الصاعد/الهابط وزخم الذكاء الاصطناعي لحماية الأرباح عند الانعكاس.',
+    smartExitEnableLabel: 'تفعيل نظام الانسحاب الذكي المتكيف',
+    smartExitMinProfitLabel: 'الحد الأدنى للربح قبل التفعيل (%):',
+    smartExitMinDropLabel: 'أقل نسبة تراجع مسموحة (%):',
+    smartExitMaxDropLabel: 'أعلى نسبة تراجع مسموحة (%):',
+    smartExitSeparateTrendLabel: 'فصل نسب التراجع بين الترند الصاعد والهابط',
+    smartExitUptrendRatioLabel: 'نسبة التراجع في الترند الصاعد (%):',
+    smartExitDowntrendRatioLabel: 'نسبة التراجع في الترند الهابط (%):',
+    smartExitUseAILabel: 'استخدام الذكاء الاصطناعي والزخم لتعديل النسبة ديناميكياً',
+    smartExitVolWindowLabel: 'نافذة قياس التقلب (بالدقائق):',
     settingsPureLearningTitle: 'وضع التعلم الذاتي الخالص (Pure Self-Learning):',
     settingsPureLearningDesc: 'عند تفعيله، يتجاهل البوت أي بيانات سابقة مسجلة مسبقاً، ويبني قراراته وقاعدة بياناته حصرياً بناءً على نتائجه الحقيقية.',
     settingsResetHistoryBtn: 'تفريغ قاعدة البيانات ومسح السجلات',
@@ -774,6 +796,17 @@ export const translations: Record<Language, Translations> = {
     settingsMaxDrawdown: 'Max Account Drawdown (%):',
     settingsTrendFilter: 'Enable Trend Filter (Blocks trades counter to macro trend)',
     settingsSmartExit: 'Enable Smart Exit (Trailing stops & time-based exits)',
+    smartExitHeaderTitle: 'Adaptive Smart Exit System (Market-Aware)',
+    smartExitHeaderDesc: 'Dynamic withdrawal mechanism adapting to coin volatility, trend direction, and AI momentum to secure profits upon reversals.',
+    smartExitEnableLabel: 'Enable Adaptive Smart Exit System',
+    smartExitMinProfitLabel: 'Min Profit Before Activation (%):',
+    smartExitMinDropLabel: 'Minimum Allowed Drop Ratio (%):',
+    smartExitMaxDropLabel: 'Maximum Allowed Drop Ratio (%):',
+    smartExitSeparateTrendLabel: 'Separate Drop Ratios for Up vs Down Trends',
+    smartExitUptrendRatioLabel: 'Uptrend Drop Ratio (%):',
+    smartExitDowntrendRatioLabel: 'Downtrend Drop Ratio (%):',
+    smartExitUseAILabel: 'Use AI Momentum to dynamically adjust drop ratio',
+    smartExitVolWindowLabel: 'Volatility Measurement Window (min):',
     settingsPureLearningTitle: 'Pure Self-Learning Mode:',
     settingsPureLearningDesc: 'When enabled, the bot disregards pre-filled benchmark data and records strategy statistics strictly from its own live trading history.',
     settingsResetHistoryBtn: 'Purge Database & Reset History',
