@@ -1,4 +1,5 @@
 import { BinanceKline, SwingRecord, SwingDirection, SwingOutcome } from '../types';
+import { generatePatternTag } from './patternClassifier';
 
 export interface SwingDetectorOptions {
   /**
@@ -368,7 +369,7 @@ export function detectSwings(
 
     const id = `${symbol}-${startTime}-${endTime}`;
 
-    swings.push({
+    const newSwing: SwingRecord = {
       id,
       symbol,
       direction,
@@ -386,7 +387,9 @@ export function detectSwings(
       startAdx,
       endAdx,
       createdAt: Date.now(),
-    });
+    };
+    newSwing.patternTag = generatePatternTag(newSwing);
+    swings.push(newSwing);
   }
 
   // 4. Determine outcomes for completed swings based on subsequent swing

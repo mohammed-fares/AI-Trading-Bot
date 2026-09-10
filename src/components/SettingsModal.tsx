@@ -49,6 +49,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     binanceApiSecret: config.binanceApiSecret || '',
     binanceNetwork: config.binanceNetwork || 'TESTNET',
     pureSelfLearning: config.pureSelfLearning !== false,
+    useTripleReview: config.useTripleReview ?? true,
+    minDecisionScore: config.minDecisionScore ?? 55,
+    minPatternOccurrences: config.minPatternOccurrences ?? 5,
+    allowHedgeTrades: config.allowHedgeTrades ?? false,
+    boostHighConviction: config.boostHighConviction ?? true,
   });
 
   const [testResult, setTestResult] = useState<BinanceTestResult | null>(null);
@@ -1032,6 +1037,154 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     </div>
                   </div>
                 </div>
+              </div>
+
+              {/* Triple Decision Review Settings Section */}
+              <div className="p-3.5 rounded-xl bg-[#1e2329] border border-blue-500/30 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="h-4 w-4 text-blue-400" />
+                    <div>
+                      <span className="font-bold text-[#eaecef] text-xs block">
+                        {isAr ? 'المراجعة الثلاثية للقرارات' : 'Triple Decision Review'}
+                      </span>
+                      <span className="text-[10px] text-[#848e9c]">
+                        {isAr
+                          ? 'تدقيق ثلاثي (الصفقات المفتوحة، ترتيب الاستراتيجية، النمط السلوكي) قبل فتح أي صفقة'
+                          : 'Tri-layer gate (Open Trades, Strategy Rank, Behavior Pattern) before order execution'}
+                      </span>
+                    </div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={formData.useTripleReview ?? true}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        useTripleReview: e.target.checked,
+                      })
+                    }
+                    className="rounded text-blue-400 focus:ring-0 accent-blue-500 h-4 w-4"
+                  />
+                </div>
+
+                {(formData.useTripleReview ?? true) && (
+                  <div className="space-y-3 pt-2 border-t border-[#2b2f36] text-xs font-mono">
+                    {/* Row 1: Min Decision Score & Min Pattern Samples */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <div className="flex justify-between items-center mb-1">
+                          <label className="text-[#848e9c] text-[11px]">
+                            {isAr ? 'الحد الأدنى للقرار (Score):' : 'Min Decision Score:'}
+                          </label>
+                          <span className="text-blue-400 font-bold">
+                            {formData.minDecisionScore ?? 55} / 100
+                          </span>
+                        </div>
+                        <input
+                          type="range"
+                          min="40"
+                          max="90"
+                          step="1"
+                          value={formData.minDecisionScore ?? 55}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              minDecisionScore: parseInt(e.target.value) || 55,
+                            })
+                          }
+                          className="w-full accent-blue-500 cursor-pointer h-1.5 bg-[#0b0e11] rounded"
+                        />
+                        <div className="flex justify-between text-[9px] text-[#848e9c] mt-0.5">
+                          <span>40 ({isAr ? 'مرن' : 'Relaxed'})</span>
+                          <span>55 ({isAr ? 'قياسي' : 'Default'})</span>
+                          <span>90 ({isAr ? 'صارم' : 'Strict'})</span>
+                        </div>
+                      </div>
+
+                      <div>
+                        <div className="flex justify-between items-center mb-1">
+                          <label className="text-[#848e9c] text-[11px]">
+                            {isAr ? 'الحد الأدنى لعينات النمط:' : 'Min Pattern Samples:'}
+                          </label>
+                          <span className="text-purple-400 font-bold">
+                            {formData.minPatternOccurrences ?? 5} {isAr ? 'تكرارات' : 'samples'}
+                          </span>
+                        </div>
+                        <input
+                          type="range"
+                          min="3"
+                          max="20"
+                          step="1"
+                          value={formData.minPatternOccurrences ?? 5}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              minPatternOccurrences: parseInt(e.target.value) || 5,
+                            })
+                          }
+                          className="w-full accent-purple-500 cursor-pointer h-1.5 bg-[#0b0e11] rounded"
+                        />
+                        <div className="flex justify-between text-[9px] text-[#848e9c] mt-0.5">
+                          <span>3</span>
+                          <span>5 ({isAr ? 'موصى به' : 'Optimal'})</span>
+                          <span>20</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Row 2: Hedge trades & High Conviction Boost */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                      <label className="flex items-center justify-between p-2.5 rounded-lg bg-[#0b0e11] border border-[#2b2f36] cursor-pointer hover:border-blue-500/40 transition">
+                        <div className="pr-2">
+                          <span className="font-semibold text-[#eaecef] text-[11px] block">
+                            {isAr ? 'السماح بصفقات التحوط (Hedge)' : 'Allow Hedge Trades'}
+                          </span>
+                          <span className="text-[9px] text-[#848e9c]">
+                            {isAr
+                              ? 'السماح بفتح صفقة معاكسة على نفس العملة بخصم نقاط'
+                              : 'Permit opposing direction trades on same asset with penalty'}
+                          </span>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={formData.allowHedgeTrades ?? false}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              allowHedgeTrades: e.target.checked,
+                            })
+                          }
+                          className="rounded text-blue-400 focus:ring-0 accent-blue-500 h-4 w-4 shrink-0"
+                        />
+                      </label>
+
+                      <label className="flex items-center justify-between p-2.5 rounded-lg bg-[#0b0e11] border border-[#2b2f36] cursor-pointer hover:border-emerald-500/40 transition">
+                        <div className="pr-2">
+                          <span className="font-semibold text-emerald-400 text-[11px] block">
+                            {isAr ? 'تعزيز حجم الصفقات القوية' : 'Boost High Conviction Sizing'}
+                          </span>
+                          <span className="text-[9px] text-[#848e9c]">
+                            {isAr
+                              ? 'زيادة حجم الصفقة 1.2x عند تحقيق درجة موافقة >= 75'
+                              : 'Scale up 1.2x on full conviction approval (>= 75 score)'}
+                          </span>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={formData.boostHighConviction ?? true}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              boostHighConviction: e.target.checked,
+                            })
+                          }
+                          className="rounded text-emerald-400 focus:ring-0 accent-emerald-500 h-4 w-4 shrink-0"
+                        />
+                      </label>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}

@@ -19,7 +19,10 @@ import {
   MarketSnapshot,
   GeminiDecisionResult,
   SmartExitStatus,
+  StrategyPerformance,
+  DecisionReview,
 } from '../types';
+import { performTripleReview } from './decisionReviewer';
 
 /**
  * Technical Indicator Calculation Engine
@@ -2058,4 +2061,72 @@ export async function callGeminiDecisionEngine(
     };
   }
 }
+
+/**
+ * Evaluates trade setup with Triple Decision Review:
+ * 1. Open Trades Check (prevents duplicates / manages hedge)
+ * 2. Strategy Performance Ranking (evaluates symbol-specific win-rates)
+ * 3. Behavioral Pattern Confirmation (validates swing fingerprint from DB)
+ */
+export async function evaluateTradeWithReview(
+  asset: CryptoAsset,
+  side: 'LONG' | 'SHORT',
+  config: BotConfig,
+  currentRegime: any,
+  strategies: Strategy[],
+  activeTrades: Trade[],
+  strategyPerformances: StrategyPerformance[],
+  currentPattern: string,
+  aiInsight?: { score: number; reason: string }
+): Promise<{
+  approved: boolean;
+  review: DecisionReview;
+  adjustedConfidence: number;
+  adjustedSize: number;
+}> {
+  const baseConfidence =
+    asset.confidence ||
+    (side === 'LONG' ? asset.longScore : asset.shortScore) ||
+    60;
+  const strategyName =
+    asset.leadingStrategy?.name || strategies[0]?.name || 'Adaptive_Momentum';
+
+  const review = await performTripleReview(
+    asset.symbol,
+    side,
+    baseConfidence,
+    strategyName,
+    activeTrades,
+    strategyPerformances,
+    currentPattern,
+    aiInsight
+  );
+
+  const baseMargin = (config.balance * (config.tradeSizePercent || 5)) / 100;
+  const baseNotional = baseMargin * (config.leverage || 20);
+  const baseSize = baseNotional / (asset.price || 1);
+
+  if (review.finalDecision === 'REJECT') {
+    return {
+      approved: false,
+      review,
+      adjustedConfidence: review.finalScore,
+      adjustedSize: 0,
+    };
+  }
+
+  // Position sizing adaptation:
+  // Full conviction (APPROVE >= 75): 1.2x boost
+  // Conservative caution (APPROVE_WITH_CAUTION 55-74): 0.7x defensive size
+  const multiplier = review.finalDecision === 'APPROVE' ? 1.2 : 0.7;
+  const adjustedSize = Number((baseSize * multiplier).toFixed(6));
+
+  return {
+    approved: true,
+    review,
+    adjustedConfidence: review.finalScore,
+    adjustedSize,
+  };
+}
+
 

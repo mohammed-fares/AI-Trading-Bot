@@ -16,12 +16,15 @@ import {
   PnLChart,
   SystemLogsPanel,
 } from './components';
+import { BehaviorDatabasePanel } from './components/BehaviorDatabasePanel';
+import { DecisionReviewPanel } from './components/DecisionReviewPanel';
 
 import {
   BotConfig,
   BotStatus,
   CryptoAsset,
   Trade,
+  TradeSide,
   Strategy,
   StrategyPerformance,
   AdaptiveConfidenceState,
@@ -34,6 +37,7 @@ import {
   AILearnedLesson,
   TimeFrameData,
   OrderbookDepthAnalysis,
+  DecisionReview,
 } from './types';
 
 import { CORE_CLASSICAL_STRATEGIES, INITIAL_STRATEGY_PERFORMANCE } from './data/strategies';
@@ -55,7 +59,11 @@ import {
   calculateMACD,
   generateMarketSnapshot,
   callGeminiDecisionEngine,
+  evaluateTradeWithReview,
 } from './services/tradingEngine';
+import { detectSwings } from './services/swingDetector';
+import { saveSwing, updatePatternStats } from './services/behaviorDatabase';
+import { computeSymbolStats } from './services/behaviorAnalytics';
 import {
   fetchLiveBinancePrices,
   fetchBinanceKlines,
@@ -68,6 +76,7 @@ import {
   ShieldAlert,
   Sparkles,
   History,
+  Database,
 } from 'lucide-react';
 
 // Default assets to seed watchlist with initial PENDING state until first live fetch
@@ -363,6 +372,11 @@ const DEFAULT_CONFIG: BotConfig = {
   targetProfitPerTradeUSD: 20, // STRICTLY $20.00 USD PROFIT PER TRADE
   geminiAiEngineEnabled: true,
   geminiMinConfidence: 65,
+  useTripleReview: true,
+  minDecisionScore: 55,
+  minPatternOccurrences: 5,
+  allowHedgeTrades: false,
+  boostHighConviction: true,
 };
 
 interface PersistentStateV20 {
@@ -392,7 +406,19 @@ export default function App() {
 
   // Bot Operational Status
   const [status, setStatus] = useState<BotStatus>('RUNNING');
-  const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'PROTECTION' | 'AI_ADAPTIVE' | 'TRADES_HISTORY'>('DASHBOARD');
+  const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'PROTECTION' | 'AI_ADAPTIVE' | 'TRADES_HISTORY' | 'BEHAVIOR_DB'>('DASHBOARD');
+
+  // Selected Decision Review for full modal inspection
+  const [selectedDecisionReview, setSelectedDecisionReview] = useState<{
+    review: DecisionReview;
+    symbol: string;
+    side: TradeSide;
+    margin?: number;
+  } | null>(null);
+
+  // Behavioral memory scan state
+  const [lastBehaviorScanTimestamp, setLastBehaviorScanTimestamp] = useState<number>(Date.now());
+  const isScanningBehaviorRef = useRef<boolean>(false);
 
   // Config & Portfolio
   const [config, setConfig] = useState<BotConfig>(DEFAULT_CONFIG);
@@ -864,6 +890,69 @@ export default function App() {
     return () => clearInterval(interval);
   }, []);
 
+  // ===================================================
+  // BEHAVIORAL DATABASE SCAN (EVERY 5 MINUTES)
+  // ===================================================
+  const runBehaviorScanCycle = useCallback(async () => {
+    if (isScanningBehaviorRef.current) return;
+    isScanningBehaviorRef.current = true;
+
+    try {
+      const activeSymbols = assets.map((a) => a.symbol);
+      for (const sym of activeSymbols) {
+        try {
+          const klineRes = await fetchBinanceKlines(sym, '15m', 100);
+          if (klineRes.success && klineRes.data && klineRes.data.length >= 30) {
+            const detectedSwings = detectSwings(klineRes.data, sym);
+            for (const swing of detectedSwings) {
+              await saveSwing(swing);
+              if (swing.outcome && swing.outcome !== 'PENDING') {
+                await updatePatternStats(sym, swing);
+              }
+            }
+            await computeSymbolStats(sym);
+
+            if (detectedSwings.length > 0) {
+              const latest = detectedSwings[detectedSwings.length - 1];
+              if (latest.patternTag) {
+                setAssets((prev) =>
+                  prev.map((a) =>
+                    a.symbol === sym
+                      ? { ...a, currentPatternTag: latest.patternTag }
+                      : a
+                  )
+                );
+              }
+            }
+          }
+        } catch (symErr) {
+          console.warn(`Error scanning behavior for ${sym}:`, symErr);
+        }
+      }
+      setLastBehaviorScanTimestamp(Date.now());
+    } catch (err) {
+      console.warn('Error in runBehaviorScanCycle:', err);
+    } finally {
+      isScanningBehaviorRef.current = false;
+    }
+  }, [assets]);
+
+  // Periodic behavioral scan: initial trigger after 4s, then every 5 minutes (300,000ms)
+  useEffect(() => {
+    const initTimer = setTimeout(() => {
+      runBehaviorScanCycle();
+    }, 4000);
+
+    const interval = setInterval(() => {
+      runBehaviorScanCycle();
+    }, 300000);
+
+    return () => {
+      clearTimeout(initTimer);
+      clearInterval(interval);
+    };
+  }, [runBehaviorScanCycle]);
+
   // Countdown timer for trading cycles
   useEffect(() => {
     if (status !== 'RUNNING') {
@@ -1245,46 +1334,101 @@ export default function App() {
             candidate.price
           );
 
+          let finalTradeSize = sizeCalc.size;
+          let finalTradeMargin = sizeCalc.margin;
+          let finalTradeNotional = sizeCalc.notional;
+          let decisionReviewData: DecisionReview | undefined = undefined;
+
+          // STEP: Triple Decision Review System (Phase 3 Integration)
+          if (config.useTripleReview !== false) {
+            const currentPattern = candidate.currentPatternTag || '';
+            const aiInsight = geminiDecision
+              ? {
+                  score: geminiDecision.confidence >= 70 ? 5 : 0,
+                  reason: isAr ? geminiDecision.reasoningAr : geminiDecision.reasoningEn,
+                }
+              : undefined;
+
+            const reviewOutcome = await evaluateTradeWithReview(
+              candidate,
+              side,
+              config,
+              currentRegime,
+              strategies,
+              activeTrades,
+              strategyPerformances,
+              currentPattern,
+              aiInsight
+            );
+
+            decisionReviewData = reviewOutcome.review;
+
+            if (!reviewOutcome.approved || decisionReviewData.finalDecision === 'REJECT') {
+              addLog(
+                isAr
+                  ? `🛡️ [المراجعة الثلاثية] حجب صفقة ${candidate.symbol} (${decisionReviewData.finalScore}/100): ${decisionReviewData.summaryAr}`
+                  : `🛡️ [Triple Review Gate] Blocked ${candidate.symbol} trade (${decisionReviewData.finalScore}/100): ${decisionReviewData.summary}`,
+                'WARN'
+              );
+              setSelectedDecisionReview({
+                review: decisionReviewData,
+                symbol: candidate.symbol,
+                side,
+                margin: sizeCalc.margin,
+              });
+              setAiAdaptiveState((prev) => ({ ...prev, consecutiveIdleCycles: prev.consecutiveIdleCycles + 1 }));
+              return;
+            }
+
+            // Adjust position size based on conviction score
+            if (reviewOutcome.adjustedSize > 0) {
+              finalTradeSize = reviewOutcome.adjustedSize;
+              finalTradeNotional = Number((finalTradeSize * candidate.price).toFixed(2));
+              finalTradeMargin = Number((finalTradeNotional / config.leverage).toFixed(2));
+            }
+          }
+
           const slDist = candidate.price * (config.stopLossPercent / 100);
           const tpDist = candidate.price * (config.takeProfitPercent / 100);
 
-            const strategyTitle =
-              candidate.leadingStrategy?.arabicName ||
-              candidate.leadingStrategy?.name ||
-              (isAr ? 'استراتيجية التحليل الفني (Trend 15m)' : 'Technical Analysis Strategy (Trend 15m)');
+          const strategyTitle =
+            candidate.leadingStrategy?.arabicName ||
+            candidate.leadingStrategy?.name ||
+            (isAr ? 'استراتيجية التحليل الفني (Trend 15m)' : 'Technical Analysis Strategy (Trend 15m)');
 
-            const newTrade: Trade = {
-              id: `tr-live-${Date.now()}`,
-              symbol: candidate.symbol,
-              side,
-              entryPrice: candidate.price,
-              currentPrice: candidate.price,
-              margin: sizeCalc.margin,
-              notional: sizeCalc.notional,
-              size: sizeCalc.size,
-              leverage: config.leverage,
-              pnl: 0,
-              pnlPercent: 0,
-              stopLoss: Number((side === 'LONG' ? candidate.price - slDist : candidate.price + slDist).toFixed(candidate.price < 1 ? 4 : 2)),
-              takeProfit: Number((side === 'LONG' ? candidate.price + tpDist : candidate.price - tpDist).toFixed(candidate.price < 1 ? 4 : 2)),
-              confidence: candidate.confidence,
-              openedAt: Date.now(),
-              exitReason: null,
-              strategyUsed: strategyTitle,
-              peakPnlPercent: 0,
-              auditScore: audit.auditScore,
-              auditVerification: audit,
-              geminiDecision,
-              targetProfitUSD: 20,
-            };
+          const newTrade: Trade = {
+            id: `tr-live-${Date.now()}`,
+            symbol: candidate.symbol,
+            side,
+            entryPrice: candidate.price,
+            currentPrice: candidate.price,
+            margin: finalTradeMargin,
+            notional: finalTradeNotional,
+            size: finalTradeSize,
+            leverage: config.leverage,
+            pnl: 0,
+            pnlPercent: 0,
+            stopLoss: Number((side === 'LONG' ? candidate.price - slDist : candidate.price + slDist).toFixed(candidate.price < 1 ? 4 : 2)),
+            takeProfit: Number((side === 'LONG' ? candidate.price + tpDist : candidate.price - tpDist).toFixed(candidate.price < 1 ? 4 : 2)),
+            confidence: candidate.confidence,
+            openedAt: Date.now(),
+            exitReason: null,
+            strategyUsed: strategyTitle,
+            peakPnlPercent: 0,
+            auditScore: audit.auditScore,
+            auditVerification: audit,
+            geminiDecision,
+            decisionReview: decisionReviewData,
+            targetProfitUSD: 20,
+          };
 
-            setActiveTrades((prev) => [...prev, newTrade]);
-            addLog(
-              isAr
-                ? `🚀 [تنفيذ صفقة بمستهدف $20] فتح صفقة تجريبية ${side} على ${candidate.symbol} | الذكاء الاصطناعي: ${geminiDecision ? `${geminiDecision.confidence}% ثقة` : 'معتمد'} | فحص: ${audit.auditScore}/100 | هامش: $${sizeCalc.margin.toFixed(1)}`
-                : `🚀 [Trade Executed - Target $20] Opened paper ${side} on ${candidate.symbol} | Gemini AI: ${geminiDecision ? `${geminiDecision.confidence}% Conf.` : 'Approved'} | Audit: ${audit.auditScore}/100 | Margin: $${sizeCalc.margin.toFixed(1)}`,
-              'SUCCESS'
-            );
+          setActiveTrades((prev) => [...prev, newTrade]);
+          addLog(
+            isAr
+              ? `🚀 [تنفيذ صفقة بمستهدف $20] فتح صفقة تجريبية ${side} على ${candidate.symbol} | مراجعة ثلاثية: ${decisionReviewData ? `${decisionReviewData.finalScore}/100 (${decisionReviewData.finalDecision})` : 'معتمد'} | فحص: ${audit.auditScore}/100 | هامش: $${finalTradeMargin.toFixed(1)}`
+              : `🚀 [Trade Executed - Target $20] Opened paper ${side} on ${candidate.symbol} | Triple Review: ${decisionReviewData ? `${decisionReviewData.finalScore}/100 (${decisionReviewData.finalDecision})` : 'Passed'} | Audit: ${audit.auditScore}/100 | Margin: $${finalTradeMargin.toFixed(1)}`,
+            'SUCCESS'
+          );
 
           setAiAdaptiveState((prev) => ({ ...prev, consecutiveIdleCycles: 0 }));
         } else if (auditedCandidates.length > 0) {
@@ -1497,7 +1641,7 @@ export default function App() {
     );
   };
 
-  const handleExecuteInstantInnovativeTrade = () => {
+  const handleExecuteInstantInnovativeTrade = async () => {
     if (activeTrades.length >= config.maxOpenTrades) {
       addLog(
         isAr
@@ -1580,6 +1724,46 @@ export default function App() {
         candidate.price
       );
 
+      let finalMargin = sizeCalc.margin;
+      let finalSize = sizeCalc.size;
+      let finalNotional = sizeCalc.notional;
+      let decisionReviewData: DecisionReview | undefined = undefined;
+
+      if (config.useTripleReview !== false) {
+        const reviewOutcome = await evaluateTradeWithReview(
+          candidate,
+          side,
+          config,
+          currentRegime,
+          strategies,
+          activeTrades,
+          strategyPerformances,
+          candidate.currentPatternTag || ''
+        );
+        decisionReviewData = reviewOutcome.review;
+        if (!reviewOutcome.approved || decisionReviewData.finalDecision === 'REJECT') {
+          addLog(
+            isAr
+              ? `🛡️ [المراجعة الثلاثية] رُفضت الصفقة الفورية لـ ${candidate.symbol}: ${decisionReviewData.summaryAr}`
+              : `🛡️ [Triple Review Gate] Rejected instant trade for ${candidate.symbol}: ${decisionReviewData.summary}`,
+            'WARN'
+          );
+          setSelectedDecisionReview({
+            review: decisionReviewData,
+            symbol: candidate.symbol,
+            side,
+            margin: sizeCalc.margin,
+          });
+          return;
+        }
+
+        if (reviewOutcome.adjustedSize > 0) {
+          finalSize = reviewOutcome.adjustedSize;
+          finalNotional = Number((finalSize * candidate.price).toFixed(2));
+          finalMargin = Number((finalNotional / config.leverage).toFixed(2));
+        }
+      }
+
       const slDist = candidate.price * (config.stopLossPercent / 100);
       const tpDist = candidate.price * (config.takeProfitPercent / 100);
 
@@ -1589,9 +1773,9 @@ export default function App() {
         side,
         entryPrice: candidate.price,
         currentPrice: candidate.price,
-        margin: sizeCalc.margin,
-        notional: sizeCalc.notional,
-        size: sizeCalc.size,
+        margin: finalMargin,
+        notional: finalNotional,
+        size: finalSize,
         leverage: config.leverage,
         pnl: 0,
         pnlPercent: 0,
@@ -1612,13 +1796,14 @@ export default function App() {
         peakPnlPercent: 0,
         auditScore: Math.max(72, audit.auditScore),
         auditVerification: audit,
+        decisionReview: decisionReviewData,
       };
 
       setActiveTrades((prev) => [...prev, newTrade]);
       addLog(
         isAr
-          ? `⚡ [تحليل الاستراتيجيات الطبيعية] فتح صفقة تجريبية ${side} على ${candidate.symbol} عبر استراتيجية: "${strategyTitle}" | فحص الجودة: ${newTrade.auditScore}/100 | هامش: $${sizeCalc.margin.toFixed(1)}`
-          : `⚡ [Natural Strategy Trade] Opened paper ${side} on ${candidate.symbol} via: "${strategyTitle}" | Audit Quality: ${newTrade.auditScore}/100 | Margin: $${sizeCalc.margin.toFixed(1)}`,
+          ? `⚡ [تحليل الاستراتيجيات الطبيعية] فتح صفقة تجريبية ${side} على ${candidate.symbol} | مراجعة ثلاثية: ${decisionReviewData ? `${decisionReviewData.finalScore}/100` : 'معتمد'} | فحص: ${newTrade.auditScore}/100 | هامش: $${finalMargin.toFixed(1)}`
+          : `⚡ [Natural Strategy Trade] Opened paper ${side} on ${candidate.symbol} | Triple Review: ${decisionReviewData ? `${decisionReviewData.finalScore}/100` : 'Approved'} | Audit: ${newTrade.auditScore}/100 | Margin: $${finalMargin.toFixed(1)}`,
         'SUCCESS'
       );
     }
@@ -1892,6 +2077,18 @@ export default function App() {
             <History className="h-4 w-4" />
             <span>{isAr ? 'سجل الصفقات' : 'Trade History'} ({closedTrades.length})</span>
           </button>
+
+          <button
+            onClick={() => setActiveTab('BEHAVIOR_DB')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl transition font-semibold whitespace-nowrap ${
+              activeTab === 'BEHAVIOR_DB'
+                ? 'bg-[#1e2329] text-blue-400 border border-[#2b2f36] shadow-sm'
+                : 'bg-[#181a20] text-[#848e9c] hover:text-[#eaecef] hover:bg-[#1e2329] border border-transparent'
+            }`}
+          >
+            <Database className="h-4 w-4 text-blue-400" />
+            <span>{isAr ? 'قاعدة البيانات السلوكية' : 'Behavioral DB'}</span>
+          </button>
         </div>
 
         {/* 4. Tab Contents */}
@@ -1937,6 +2134,16 @@ export default function App() {
               <ActiveTradesPanel
                 trades={activeTrades}
                 onCloseTrade={handleCloseTrade}
+                onOpenDecisionReview={(trade) => {
+                  if (trade.decisionReview) {
+                    setSelectedDecisionReview({
+                      review: trade.decisionReview,
+                      symbol: trade.symbol,
+                      side: trade.side,
+                      margin: trade.margin,
+                    });
+                  }
+                }}
               />
 
               <WatchlistPanel
@@ -1984,6 +2191,16 @@ export default function App() {
             <TradeHistoryPanel closedTrades={closedTrades} />
           </div>
         )}
+
+        {activeTab === 'BEHAVIOR_DB' && (
+          <div className="space-y-4">
+            <BehaviorDatabasePanel
+              language={isAr ? 'ar' : 'en'}
+              onRefreshScan={runBehaviorScanCycle}
+              lastScanTimestamp={lastBehaviorScanTimestamp}
+            />
+          </div>
+        )}
       </main>
 
       {/* 5. Interactive Modals */}
@@ -2025,6 +2242,18 @@ export default function App() {
         isOpen={isDocsOpen}
         onClose={() => setIsDocsOpen(false)}
       />
+
+      {/* 6. Decision Review Modal */}
+      {selectedDecisionReview && (
+        <DecisionReviewPanel
+          review={selectedDecisionReview.review}
+          symbol={selectedDecisionReview.symbol}
+          side={selectedDecisionReview.side}
+          adjustedSizeUSDT={selectedDecisionReview.margin}
+          language={isAr ? 'ar' : 'en'}
+          onClose={() => setSelectedDecisionReview(null)}
+        />
+      )}
     </div>
   );
 }

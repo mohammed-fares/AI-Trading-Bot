@@ -17,9 +17,14 @@ import { useLanguage } from '../i18n/LanguageContext';
 interface ActiveTradesPanelProps {
   trades: Trade[];
   onCloseTrade: (tradeId: string) => void;
+  onOpenDecisionReview?: (trade: Trade) => void;
 }
 
-export const ActiveTradesPanel: React.FC<ActiveTradesPanelProps> = ({ trades, onCloseTrade }) => {
+export const ActiveTradesPanel: React.FC<ActiveTradesPanelProps> = ({
+  trades,
+  onCloseTrade,
+  onOpenDecisionReview,
+}) => {
   const { t, isAr } = useLanguage();
   const [selectedAuditTrade, setSelectedAuditTrade] = useState<Trade | null>(null);
 
@@ -146,15 +151,26 @@ export const ActiveTradesPanel: React.FC<ActiveTradesPanelProps> = ({ trades, on
 
                     {/* Quality Audit Score Badge */}
                     <td className="py-2.5 px-2">
-                      <button
-                        onClick={() => setSelectedAuditTrade(trade)}
-                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20 text-[10px] font-bold transition font-mono"
-                        title={isAr ? 'عرض فحص وتدقيق الجودة لهذه الصفقة' : 'View quality audit verification'}
-                      >
-                        <ShieldCheck className="h-3 w-3 text-emerald-400" />
-                        <span>{auditScore}%</span>
-                        <span className="text-[9px] text-emerald-300">🛡️</span>
-                      </button>
+                      <div className="flex flex-col gap-1 items-start">
+                        <button
+                          onClick={() => setSelectedAuditTrade(trade)}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20 text-[10px] font-bold transition font-mono"
+                          title={isAr ? 'عرض فحص وتدقيق الجودة لهذه الصفقة' : 'View quality audit verification'}
+                        >
+                          <ShieldCheck className="h-3 w-3 text-emerald-400" />
+                          <span>{auditScore}%</span>
+                          <span className="text-[9px] text-emerald-300">🛡️</span>
+                        </button>
+                        {trade.decisionReview && onOpenDecisionReview && (
+                          <button
+                            onClick={() => onOpenDecisionReview(trade)}
+                            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-500/10 border border-blue-500/30 text-blue-400 hover:bg-blue-500/20 text-[9px] font-bold transition font-mono"
+                            title={isAr ? 'عرض تدقيق المراجعة الثلاثية' : 'View Triple Decision Review'}
+                          >
+                            <span>🎯 {trade.decisionReview.finalScore}/100</span>
+                          </button>
+                        )}
+                      </div>
                     </td>
 
                     {/* SL / TP */}

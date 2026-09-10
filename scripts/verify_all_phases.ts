@@ -24,6 +24,26 @@ import {
 } from '../src/services/tradingEngine';
 
 import { detectSwings } from '../src/services/swingDetector';
+import {
+  saveSwing,
+  getSwingsBySymbol,
+  getSymbolStats,
+  updatePatternStats,
+  clearAllData,
+} from '../src/services/behaviorDatabase';
+import {
+  computeSymbolStats,
+} from '../src/services/behaviorAnalytics';
+import {
+  classifyPattern,
+  predictOutcome,
+} from '../src/services/predictionEngine';
+import {
+  performTripleReview,
+} from '../src/services/decisionReviewer';
+import {
+  evaluateTradeWithReview,
+} from '../src/services/tradingEngine';
 
 import {
   CryptoAsset,
@@ -31,6 +51,7 @@ import {
   TimeFrameData,
   Trade,
   BinanceKline,
+  StrategyPerformance,
 } from '../src/types';
 
 import { INITIAL_STRATEGIES } from '../src/data/strategies';
@@ -411,6 +432,130 @@ async function runAllTests() {
 
   // Empty / insufficient data returns empty array
   assert(detectSwings([], 'BTCUSDT').length === 0, 'Empty klines gracefully returns empty array');
+
+  // TEST 15: Phase 2 Behavioral Database & Analytics
+  console.log('\nTEST 15: Phase 2 Behavioral Database & Analytics');
+  await clearAllData();
+
+  for (const s of detectedSwings.slice(0, 10)) {
+    await saveSwing(s);
+    if (s.outcome && s.outcome !== 'PENDING') {
+      await updatePatternStats('BTCUSDT', s);
+    }
+  }
+
+  const savedSwings = await getSwingsBySymbol('BTCUSDT');
+  assert(savedSwings.length >= 10, `Successfully saved and retrieved ${savedSwings.length} swings from behavioral memory`);
+
+  const symbolStats = await computeSymbolStats('BTCUSDT');
+  assert(symbolStats.symbol === 'BTCUSDT', 'Symbol stats generated for BTCUSDT');
+  assert(symbolStats.totalSwings >= 10, `Recorded swings counted: ${symbolStats.totalSwings}`);
+  assert(symbolStats.avgUpPct >= 0, `Average up amplitude computed: ${symbolStats.avgUpPct}%`);
+  assert(symbolStats.overallAccuracy >= 0 && symbolStats.overallAccuracy <= 100, `Overall accuracy computed: ${symbolStats.overallAccuracy}%`);
+
+  // TEST 16: Phase 2 & 3 Pattern Classification & Prediction Engine
+  console.log('\nTEST 16: Phase 2 & 3 Pattern Classification & Prediction Engine');
+  const sampleSwing = detectedSwings[0];
+  const patternTag = classifyPattern(sampleSwing);
+  assert(typeof patternTag === 'string' && patternTag.length > 0, `Pattern tag successfully classified: ${patternTag}`);
+
+  // Seed sample pattern occurrences to test prediction
+  for (let i = 0; i < 6; i++) {
+    await updatePatternStats('BTCUSDT', {
+      ...sampleSwing,
+      patternTag,
+      outcome: 'CONTINUED',
+      outcomeMagnitude: 1.8,
+    });
+  }
+
+  const prediction = await predictOutcome('BTCUSDT', patternTag);
+  assert(prediction !== null, 'Prediction generated from pattern memory');
+  assert(prediction.expectedDirection !== undefined, `Predicted expectedDirection: ${prediction.expectedDirection} (${prediction.confidence}% conf)`);
+  assert(prediction.sampleSize >= 5, `Sample size tracked: ${prediction.sampleSize}`);
+
+  // TEST 17: Phase 3 Triple Decision Review System
+  console.log('\nTEST 17: Phase 3 Triple Decision Review System');
+  const mockPerformances: StrategyPerformance[] = [
+    {
+      strategyId: 'trend_following_15m',
+      strategyName: 'Trend Following 15m',
+      symbol: 'BTCUSDT',
+      wins: 15,
+      losses: 5,
+      winRate: 75.0,
+      totalPnl: 340.5,
+      avgConfidence: 80,
+      bestTrade: 45,
+      worstTrade: -15,
+    },
+  ];
+
+  // Test 17a: Standard clean trade
+  const cleanReview = await performTripleReview(
+    'BTCUSDT',
+    'LONG',
+    78,
+    'Trend Following 15m',
+    [],
+    mockPerformances,
+    patternTag
+  );
+
+  assert(cleanReview.openTradesCheck.hasOpenTradeOnSymbol === false, 'Layer 1 (Open Trades) passed with 0 active trades');
+  assert(cleanReview.finalScore >= 40, `Final Triple Review score is positive: ${cleanReview.finalScore}/100`);
+  assert(['APPROVE', 'CAUTION', 'REJECT'].includes(cleanReview.finalDecision), `Decision is valid: ${cleanReview.finalDecision}`);
+
+  // Test 17b: Duplicate trade rejection (same side)
+  const duplicateTrade: Trade = {
+    id: 'tr-exist-1',
+    symbol: 'BTCUSDT',
+    side: 'LONG',
+    entryPrice: 60000,
+    currentPrice: 60000,
+    margin: 100,
+    notional: 1000,
+    size: 0.016,
+    leverage: 10,
+    pnl: 0,
+    pnlPercent: 0,
+    stopLoss: 59000,
+    takeProfit: 62000,
+    confidence: 80,
+    openedAt: Date.now(),
+    strategyUsed: 'Trend Following',
+  };
+
+  const duplicateReview = await performTripleReview(
+    'BTCUSDT',
+    'LONG',
+    78,
+    'Trend Following 15m',
+    [duplicateTrade],
+    mockPerformances,
+    patternTag
+  );
+
+  assert(duplicateReview.openTradesCheck.decision === 'BLOCK', 'Layer 1 correctly blocks duplicate open trade');
+  assert(duplicateReview.finalDecision === 'REJECT', 'Triple Review rejects duplicate position');
+
+  // TEST 18: Full evaluateTradeWithReview Integration
+  console.log('\nTEST 18: Full evaluateTradeWithReview Integration');
+  const reviewResult = await evaluateTradeWithReview(
+    testAssetValid,
+    'LONG',
+    DEFAULT_CONFIG,
+    'BULLISH',
+    INITIAL_STRATEGIES,
+    [],
+    mockPerformances,
+    patternTag
+  );
+
+  assert(reviewResult.review !== undefined, 'Review result object populated');
+  assert(reviewResult.approved === true, 'Valid setup successfully approved by Triple Review');
+  assert(reviewResult.adjustedSize > 0, `Adjusted position size computed: ${reviewResult.adjustedSize}`);
+  assert(reviewResult.adjustedConfidence >= 0, `Adjusted confidence computed: ${reviewResult.adjustedConfidence}%`);
 
   console.log('\n=====================================================');
   console.log(`VERIFICATION COMPLETE: ${passedTests}/${totalTests} TESTS PASSED`);

@@ -279,6 +279,7 @@ export interface CryptoAsset {
   // Market Data Validity
   dataStatus?: 'VALID' | 'DATA_INVALID' | 'PENDING';
   lastDataError?: string;
+  currentPatternTag?: string;
 }
 
 export interface Trade {
@@ -308,6 +309,7 @@ export interface Trade {
   auditScore?: number;
   auditVerification?: TradeAuditVerification;
   geminiDecision?: GeminiDecisionResult;
+  decisionReview?: DecisionReview;
   openedAt: number; // timestamp
   closedAt?: number;
   closePrice?: number;
@@ -392,6 +394,18 @@ export interface BotConfig {
   smartFreezeEnabled: boolean; // Suspends trading on pairs with abnormal 15m volatility
   smartFreezeThresholdPercent: number; // 15m price swing threshold (e.g. 2.8%)
   smartFreezeDurationMinutes: number; // Freeze duration (e.g. 15 min)
+  // Triple Decision Review Settings
+  enableTripleReview?: boolean;
+  useTripleReview?: boolean;
+  minDecisionScore?: number;
+  minFinalScoreForApprove?: number;
+  minFinalScoreForCaution?: number;
+  blockIfOpenTradeExists?: boolean;
+  allowHedgeTrades?: boolean;
+  boostHighConviction?: boolean;
+  useTopStrategiesOnly?: boolean;
+  minStrategyWinRate?: number;
+  minPatternOccurrences?: number;
 }
 
 // ==========================================
@@ -691,3 +705,47 @@ export interface SymbolBehaviorStats {
   topPatterns: PatternStats[];
   lastUpdated: number;
 }
+
+export interface DecisionReview {
+  openTradesCheck: {
+    hasOpenTradeOnSymbol: boolean;
+    openTradeId?: string;
+    openTradeSide?: 'LONG' | 'SHORT';
+    decision: 'PASS' | 'BLOCK' | 'ALLOW_HEDGE';
+    scoreDelta: number;
+    reason: string;
+    reasonAr: string;
+  };
+  strategyReview: {
+    suggestedStrategy: string;
+    suggestedStrategyWinRate: number;
+    topStrategiesForSymbol: Array<{
+      name: string;
+      winRate: number;
+      tradesCount: number;
+    }>;
+    isTopStrategy: boolean;
+    decision: 'STRONG_PASS' | 'PASS' | 'WEAK_PASS' | 'BLOCK';
+    scoreDelta: number;
+    reason: string;
+    reasonAr: string;
+  };
+  patternReview: {
+    currentPatternTag: string;
+    patternOccurrences: number;
+    patternConfidence: number;
+    expectedDirection: 'UP' | 'DOWN' | 'SIDEWAYS';
+    matchesSuggestedDirection: boolean;
+    decision: 'STRONG_PASS' | 'PASS' | 'NEUTRAL' | 'BLOCK';
+    scoreDelta: number;
+    reason: string;
+    reasonAr: string;
+  };
+  finalDecision: 'APPROVE' | 'APPROVE_WITH_CAUTION' | 'REJECT';
+  finalScore: number;
+  baseScore: number;
+  aiInsightScore: number;
+  summary: string;
+  summaryAr: string;
+}
+
